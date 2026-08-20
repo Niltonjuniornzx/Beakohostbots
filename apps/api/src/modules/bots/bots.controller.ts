@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AuthGuard, SessionUser } from '../auth/auth.guard';
-import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto } from './bots.dto';
+import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto, InstallDependenciesDto } from './bots.dto';
 import { BotsService } from './bots.service';
 
 @UseGuards(AuthGuard)
@@ -16,4 +16,7 @@ export class BotsController {
   @Post(':id/files/delete') removeFile(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotFilePathDto) { return this.bots.removeFile(request.user.sub, id, input.path); }
   @Post(':id/actions') action(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotActionDto) { return this.bots.action(request.user.sub,id,input.action); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
+  @Get(':id/dependencies') dependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.dependencies(request.user.sub,id); }
+  @Post(':id/dependencies/install') installDependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: InstallDependenciesDto) { return this.bots.installDependencies(request.user.sub,id,input.packages); }
+  @Get(':id/logs') logs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.logs(request.user.sub,id); }
 }

@@ -1,4 +1,4 @@
-import { IsBase64, IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBase64, IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class CreateBotDto {
   @IsString() @MinLength(2) @MaxLength(50) name!: string;
@@ -17,3 +17,6 @@ export class BotFilePathDto {
   @IsString() @MinLength(1) @MaxLength(240) @Matches(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_./@()+ -]+$/) path!: string;
 }
 export class BotActionDto { @IsIn(['SYNC','INSTALL','START','STOP','RESTART']) action!: 'SYNC'|'INSTALL'|'START'|'STOP'|'RESTART'; }
+export class InstallDependenciesDto {
+  @IsArray() @ArrayMaxSize(100) @IsString({each:true}) @Matches(/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i,{each:true}) packages!: string[];
+}

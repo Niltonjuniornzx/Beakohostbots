@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { CompleteJobDto, EnrollAgentDto, HeartbeatDto } from './agents.dto';
+import { BotTelemetryDto, CompleteJobDto, EnrollAgentDto, HeartbeatDto } from './agents.dto';
 
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 
@@ -21,12 +21,13 @@ export class AgentsService {
   async heartbeat(authorization:string|undefined,input:HeartbeatDto){
     const node=await this.authenticate(authorization);
     await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}});
+    await this.prisma.bot.updateMany({where:{nodeId:null},data:{nodeId:node.id}});
     return{ok:true,nodeId:node.id,nextHeartbeatSeconds:30};
   }
   async nextJob(authorization:string|undefined){
     const node=await this.authenticate(authorization);
     const queued=await this.prisma.agentJob.findFirst({where:{nodeId:node.id,status:'QUEUED'},orderBy:{createdAt:'asc'},include:{bot:{include:{runtime:true,files:{select:{path:true,content:true,byteSize:true}},limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1}}}}}}});
-    if(!queued)return{job:null,pollAfterSeconds:3};
+    if(!queued){const monitorBotIds=await this.prisma.bot.findMany({where:{nodeId:node.id,status:{in:['RUNNING','STARTING','CRASHED']}},select:{id:true}});return{job:null,pollAfterSeconds:3,monitorBotIds:monitorBotIds.map(bot=>bot.id)}};
     const claimed=await this.prisma.agentJob.updateMany({where:{id:queued.id,status:'QUEUED'},data:{status:'RUNNING',startedAt:new Date()}});
     if(!claimed.count)return{job:null,pollAfterSeconds:1};
     const limit=queued.bot.limits[0]||queued.bot.user.limits[0];
@@ -46,5 +47,6 @@ export class AgentsService {
     });
     return{ok:true};
   }
+  async telemetry(authorization:string|undefined,id:string,input:BotTelemetryDto){const node=await this.authenticate(authorization);const bot=await this.prisma.bot.findFirst({where:{id,nodeId:node.id}});if(!bot)throw new UnauthorizedException('Bot não pertence a este Runner');const now=new Date();await this.prisma.$transaction(async tx=>{await tx.botLogChunk.deleteMany({where:{botId:id}});if(input.logs)await tx.botLogChunk.create({data:{botId:id,stream:'combined',content:input.logs.slice(-200000),firstTimestamp:now,lastTimestamp:now,byteSize:Buffer.byteLength(input.logs),expiresAt:new Date(Date.now()+7*86400000)}});if(input.running&&bot.status!=='RUNNING')await tx.bot.update({where:{id},data:{status:'RUNNING'}});if(!input.running&&bot.status==='RUNNING')await tx.bot.update({where:{id},data:{status:'CRASHED',lastExitCode:input.exitCode}})});return{ok:true}}
   private async authenticate(authorization:string|undefined){const token=authorization?.startsWith('Bearer ')?authorization.slice(7):'';if(!token)throw new UnauthorizedException('Credencial do agente ausente');const node=await this.prisma.executionNode.findFirst({where:{agentTokenHash:digest(token)}});if(!node)throw new UnauthorizedException('Credencial do agente inválida');return node}
 }

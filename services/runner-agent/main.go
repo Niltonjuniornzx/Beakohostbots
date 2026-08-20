@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.3.0"
+const agentVersion = "0.4.0"
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -191,6 +191,7 @@ func jobLoop(cfg config) {
 		var response struct {
 			Job *runnerJob `json:"job"`
 			PollAfterSeconds int `json:"pollAfterSeconds"`
+			MonitorBotIDs []string `json:"monitorBotIds"`
 		}
 		if err := postJSON(cfg.PanelURL+"/api/agents/jobs/next", cfg.AgentToken, map[string]bool{}, &response); err != nil {
 			log.Printf("job poll failed: %v", err)
@@ -198,6 +199,7 @@ func jobLoop(cfg config) {
 			continue
 		}
 		if response.Job == nil {
+			for _,botID:=range response.MonitorBotIDs { publishTelemetry(cfg,botID) }
 			wait := response.PollAfterSeconds
 			if wait < 1 || wait > 30 { wait = 3 }
 			time.Sleep(time.Duration(wait)*time.Second)
@@ -210,6 +212,17 @@ func jobLoop(cfg config) {
 			log.Printf("cannot complete job %s: %v", response.Job.ID, completeErr)
 		}
 	}
+}
+
+func publishTelemetry(cfg config, botID string) {
+	if !validID(botID){return}
+	name:=containerName(botID)
+	inspect,err:=exec.Command("docker","inspect","-f","{{.State.Running}}|{{.State.ExitCode}}",name).CombinedOutput()
+	running:=false;exitCode:=0
+	if err==nil {parts:=strings.Split(strings.TrimSpace(string(inspect)),"|");running=len(parts)>0&&parts[0]=="true";if len(parts)>1{exitCode,_=strconv.Atoi(parts[1])}}
+	logs,_:=exec.Command("docker","logs","--tail","250","--timestamps",name).CombinedOutput()
+	payload:=map[string]any{"running":running,"exitCode":exitCode,"logs":string(logs)}
+	if err:=postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry",cfg.AgentToken,payload,nil);err!=nil{log.Printf("telemetry failed for %s: %v",botID,err)}
 }
 
 func executeJob(job runnerJob) (string,string,error) {

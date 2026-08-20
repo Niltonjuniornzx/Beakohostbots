@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { builtinModules } from 'module';
 import { PrismaService } from '../prisma/prisma.service';
 import { BotFileDto, CreateBotDto } from './bots.dto';
 
@@ -54,6 +55,21 @@ export class BotsService {
   async removeFile(userId:string,id:string,path:string){await this.ownedBot(userId,id);await this.prisma.botFile.deleteMany({where:{botId:id,path}});await this.queueSync(id);return{success:true}}
   async action(userId:string,id:string,action:string){const bot=await this.prisma.bot.findFirst({where:{id,userId},select:{id:true,nodeId:true,node:{select:{status:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');if(!bot.nodeId||bot.node?.status!=='ONLINE')throw new BadRequestException('Atribua um Runner online a este bot');const active=await this.prisma.agentJob.findFirst({where:{botId:id,status:{in:['QUEUED','RUNNING']}}});if(active)throw new BadRequestException('Já existe uma tarefa em andamento para este bot');if(action==='INSTALL')await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}});const job=await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action}});if(action==='START')await this.prisma.bot.update({where:{id},data:{status:'STARTING'}});if(action==='STOP')await this.prisma.bot.update({where:{id},data:{status:'STOPPING'}});return job}
   async jobs(userId:string,id:string){await this.ownedBot(userId,id);return this.prisma.agentJob.findMany({where:{botId:id},select:{id:true,action:true,status:true,output:true,error:true,createdAt:true,startedAt:true,finishedAt:true},orderBy:{createdAt:'desc'},take:20})}
+  async dependencies(userId:string,id:string){
+    await this.ownedBot(userId,id);
+    const files=await this.prisma.botFile.findMany({where:{botId:id},select:{path:true,content:true}});
+    const detected=new Set<string>();const builtins=new Set([...builtinModules,...builtinModules.map(name=>'node:'+name)]);
+    const pattern=/(?:require\s*\(\s*|from\s+|import\s*\(\s*|import\s+)["']([^"']+)["']/g;
+    for(const file of files.filter(file=>/\.(?:js|cjs|mjs|ts|tsx|jsx)$/.test(file.path))){const source=Buffer.from(file.content).toString('utf8');let match:RegExpExecArray|null;while((match=pattern.exec(source))){const spec=match[1];if(spec.startsWith('.')||spec.startsWith('/')||builtins.has(spec))continue;detected.add(spec.startsWith('@')?spec.split('/').slice(0,2).join('/'):spec.split('/')[0])}}
+    let declared:Record<string,string>={};const manifest=files.find(file=>file.path==='package.json');if(manifest)try{const parsed=JSON.parse(Buffer.from(manifest.content).toString('utf8'));declared={...(parsed.dependencies||{}),...(parsed.devDependencies||{})}}catch{}
+    const all=[...detected].sort();return{detected:all,declared:Object.keys(declared).sort(),missing:all.filter(name=>!declared[name]),hasPackageJson:Boolean(manifest)};
+  }
+  async installDependencies(userId:string,id:string,packages:string[]){
+    const bot=await this.prisma.bot.findFirst({where:{id,userId},select:{id:true,nodeId:true,entrypoint:true,runtime:{select:{language:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');if(bot.runtime.language!=='NODEJS')return this.action(userId,id,'INSTALL');if(!bot.nodeId)throw new BadRequestException('Bot sem Runner atribuído');
+    const existing=await this.prisma.botFile.findUnique({where:{botId_path:{botId:id,path:'package.json'}}});let manifest:any={name:'beakohost-bot',version:'1.0.0',private:true,main:bot.entrypoint};if(existing)try{manifest=JSON.parse(Buffer.from(existing.content).toString('utf8'))}catch{throw new BadRequestException('package.json inválido')};manifest.dependencies={...(manifest.dependencies||{})};for(const name of [...new Set(packages)])manifest.dependencies[name]=manifest.dependencies[name]||'latest';const content=Buffer.from(JSON.stringify(manifest,null,2)+'\n');await this.prisma.botFile.upsert({where:{botId_path:{botId:id,path:'package.json'}},update:{content,byteSize:content.length},create:{botId:id,path:'package.json',content,byteSize:content.length}});
+    const syncActive=await this.prisma.agentJob.count({where:{botId:id,action:'SYNC',status:{in:['QUEUED','RUNNING']}}});if(!syncActive)await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}});const installActive=await this.prisma.agentJob.count({where:{botId:id,action:'INSTALL',status:{in:['QUEUED','RUNNING']}}});if(!installActive)await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'INSTALL'}});return{success:true,packageJson:manifest};
+  }
+  async logs(userId:string,id:string){await this.ownedBot(userId,id);const chunks=await this.prisma.botLogChunk.findMany({where:{botId:id},orderBy:{lastTimestamp:'desc'},take:1});return{content:chunks[0]?.content||'',updatedAt:chunks[0]?.lastTimestamp||null}}
   private async queueSync(id:string){const bot=await this.prisma.bot.findUnique({where:{id},select:{nodeId:true}});if(!bot?.nodeId)return;const active=await this.prisma.agentJob.count({where:{botId:id,action:'SYNC',status:{in:['QUEUED','RUNNING']}}});if(!active)await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}})}
   private async ownedBot(userId:string,id:string){const bot=await this.prisma.bot.findFirst({where:{id,userId},select:{id:true}});if(!bot)throw new NotFoundException('Bot não encontrado');return bot}
 }

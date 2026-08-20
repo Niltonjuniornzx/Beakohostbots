@@ -21,3 +21,8 @@ export class CompleteJobDto {
   @IsOptional() @IsString() @MaxLength(4000) error?: string;
   @IsOptional() @IsString() @MaxLength(255) containerId?: string;
 }
+export class BotTelemetryDto {
+  @IsBoolean() running!: boolean;
+  @IsOptional() @IsInt() exitCode?: number;
+  @IsString() @MaxLength(200000) logs!: string;
+}
