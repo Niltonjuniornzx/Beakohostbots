@@ -6,15 +6,18 @@ Wants=network-online.target
 [Service]
 User=beako-agent
 Group=beako-agent
-EnvironmentFile=/etc/beakohost/agent.env
-ExecStart=/usr/local/bin/beako-runner
+ExecStart=/usr/local/bin/beako-runner --config /etc/beakohost/runner.json
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/srv/beakohost
+ReadWritePaths=/etc/beakohost /srv/beakohost
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

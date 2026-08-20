@@ -1,0 +1,2 @@
+import{Body,Controller,Headers,Post}from'@nestjs/common';import{AgentsService}from'./agents.service';import{EnrollAgentDto,HeartbeatDto}from'./agents.dto';
+@Controller('agents')export class AgentsController{constructor(private readonly agents:AgentsService){}@Post('enroll')enroll(@Body()body:EnrollAgentDto){return this.agents.enroll(body)}@Post('heartbeat')heartbeat(@Headers('authorization')authorization:string|undefined,@Body()body:HeartbeatDto){return this.agents.heartbeat(authorization,body)}}
