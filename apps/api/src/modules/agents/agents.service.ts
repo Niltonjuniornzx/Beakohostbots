@@ -54,6 +54,37 @@ export class AgentsService {
     });
     return{ok:true};
   }
-  async telemetry(authorization:string|undefined,id:string,input:BotTelemetryDto){const node=await this.authenticate(authorization);const bot=await this.prisma.bot.findFirst({where:{id,nodeId:node.id},include:{limits:{where:{scope:'BOT'},take:1},user:{include:{limits:{where:{scope:'USER'},take:1},plan:{include:{limits:{where:{scope:'PLAN'},take:1}}}}}});if(!bot)throw new UnauthorizedException('Bot não pertence a este Runner');const now=new Date(),periodStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));const ingress=BigInt(input.networkIngressBytes??0),egress=BigInt(input.networkEgressBytes??0),deltaIn=ingress>=bot.lastNetworkIngressBytes?ingress-bot.lastNetworkIngressBytes:ingress,deltaOut=egress>=bot.lastNetworkEgressBytes?egress-bot.lastNetworkEgressBytes:egress;await this.prisma.$transaction(async tx=>{await tx.botLogChunk.deleteMany({where:{botId:id}});if(input.logs)await tx.botLogChunk.create({data:{botId:id,stream:'combined',content:input.logs.slice(-200000),firstTimestamp:now,lastTimestamp:now,byteSize:Buffer.byteLength(input.logs),expiresAt:new Date(Date.now()+7*86400000)}});if(deltaIn||deltaOut)await tx.trafficPeriod.upsert({where:{botId_periodStart:{botId:id,periodStart}},create:{botId:id,periodStart,ingressBytes:deltaIn,egressBytes:deltaOut},update:{ingressBytes:{increment:deltaIn},egressBytes:{increment:deltaOut}}});if(input.oomKilled)await tx.resourceEvent.create({data:{botId:id,kind:'OOM',message:'Container encerrado pelo limite de memória'}});await tx.bot.update({where:{id},data:{cpuUsagePercent:input.cpuUsagePercent??bot.cpuUsagePercent,memoryUsageMb:input.memoryUsageMb??bot.memoryUsageMb,diskUsageMb:input.diskUsageMb??bot.diskUsageMb,lastNetworkIngressBytes:ingress,lastNetworkEgressBytes:egress,lastMetricsAt:now,...(input.running?{status:'RUNNING'}:bot.status==='RUNNING'?{status:'CRASHED',lastExitCode:input.exitCode}:{})}})});const limit=bot.limits[0]||bot.user.limits[0]||bot.user.plan?.limits[0];const period=await this.prisma.trafficPeriod.findUnique({where:{botId_periodStart:{botId:id,periodStart}}});const used=(period?.ingressBytes||0n)+(period?.egressBytes||0n),allowed=((limit?.bandwidthIngressMb||0n)+(limit?.bandwidthEgressMb||0n))*1048576n;if(limit?.suspendOnTrafficLimit&&allowed>0n&&used>=allowed&&bot.status!=='SUSPENDED'){await this.prisma.bot.update({where:{id},data:{status:'SUSPENDED'}});await this.prisma.resourceEvent.create({data:{botId:id,kind:'TRAFFIC_LIMIT',message:'Bot suspenso ao atingir o tráfego mensal'}});return{ok:true,action:'STOP'}}return{ok:true}}
+  async telemetry(authorization:string|undefined,id:string,input:BotTelemetryDto){
+    const node=await this.authenticate(authorization);
+    const bot=await this.prisma.bot.findFirst({
+      where:{id,nodeId:node.id},
+      include:{
+        limits:{where:{scope:'BOT'},take:1},
+        user:{include:{limits:{where:{scope:'USER'},take:1},plan:{include:{limits:{where:{scope:'PLAN'},take:1}}}}},
+      },
+    });
+    if(!bot)throw new UnauthorizedException('Bot não pertence a este Runner');
+    const now=new Date(),periodStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
+    const ingress=BigInt(input.networkIngressBytes??0),egress=BigInt(input.networkEgressBytes??0);
+    const deltaIn=ingress>=bot.lastNetworkIngressBytes?ingress-bot.lastNetworkIngressBytes:ingress;
+    const deltaOut=egress>=bot.lastNetworkEgressBytes?egress-bot.lastNetworkEgressBytes:egress;
+    await this.prisma.$transaction(async tx=>{
+      await tx.botLogChunk.deleteMany({where:{botId:id}});
+      if(input.logs)await tx.botLogChunk.create({data:{botId:id,stream:'combined',content:input.logs.slice(-200000),firstTimestamp:now,lastTimestamp:now,byteSize:Buffer.byteLength(input.logs),expiresAt:new Date(Date.now()+7*86400000)}});
+      if(deltaIn||deltaOut)await tx.trafficPeriod.upsert({where:{botId_periodStart:{botId:id,periodStart}},create:{botId:id,periodStart,ingressBytes:deltaIn,egressBytes:deltaOut},update:{ingressBytes:{increment:deltaIn},egressBytes:{increment:deltaOut}}});
+      if(input.oomKilled)await tx.resourceEvent.create({data:{botId:id,kind:'OOM',message:'Container encerrado pelo limite de memória'}});
+      await tx.bot.update({where:{id},data:{cpuUsagePercent:input.cpuUsagePercent??bot.cpuUsagePercent,memoryUsageMb:input.memoryUsageMb??bot.memoryUsageMb,diskUsageMb:input.diskUsageMb??bot.diskUsageMb,lastNetworkIngressBytes:ingress,lastNetworkEgressBytes:egress,lastMetricsAt:now,...(input.running?{status:'RUNNING' as const}:bot.status==='RUNNING'?{status:'CRASHED' as const,lastExitCode:input.exitCode}:{})}});
+    });
+    const limit=bot.limits[0]||bot.user.limits[0]||bot.user.plan?.limits[0];
+    const period=await this.prisma.trafficPeriod.findUnique({where:{botId_periodStart:{botId:id,periodStart}}});
+    const used=(period?.ingressBytes||0n)+(period?.egressBytes||0n);
+    const allowed=((limit?.bandwidthIngressMb||0n)+(limit?.bandwidthEgressMb||0n))*1048576n;
+    if(limit?.suspendOnTrafficLimit&&allowed>0n&&used>=allowed&&bot.status!=='SUSPENDED'){
+      await this.prisma.bot.update({where:{id},data:{status:'SUSPENDED'}});
+      await this.prisma.resourceEvent.create({data:{botId:id,kind:'TRAFFIC_LIMIT',message:'Bot suspenso ao atingir o tráfego mensal'}});
+      return{ok:true,action:'STOP'};
+    }
+    return{ok:true};
+  }
   private async authenticate(authorization:string|undefined){const token=authorization?.startsWith('Bearer ')?authorization.slice(7):'';if(!token)throw new UnauthorizedException('Credencial do agente ausente');const node=await this.prisma.executionNode.findFirst({where:{agentTokenHash:digest(token)}});if(!node)throw new UnauthorizedException('Credencial do agente inválida');return node}
 }
