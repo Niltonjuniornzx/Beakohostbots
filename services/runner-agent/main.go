@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.5.0"
+const agentVersion = "0.6.0"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -130,8 +130,13 @@ func collectMetrics() metrics {
 }
 
 func availableRuntimeImages() []string {
-	images:=make([]string,0,len(managedRuntimeImages))
-	for _,image:=range managedRuntimeImages { if exec.Command("docker","image","inspect",image).Run()==nil { images=append(images,image) } }
+	images:=[]string{}
+	output,err:=exec.Command("docker","images","--format","{{.Repository}}:{{.Tag}}").Output()
+	if err!=nil{return images}
+	for _,image:=range strings.Split(string(output),"\n") {
+		image=strings.TrimSpace(image)
+		if (strings.HasPrefix(image,"node:")||strings.HasPrefix(image,"python:"))&&(strings.HasSuffix(image,"-alpine")||strings.HasSuffix(image,"-slim")) { images=append(images,image) }
+	}
 	return images
 }
 
@@ -248,9 +253,19 @@ func executeJob(job runnerJob) (string,string,error) {
 		return dockerCommand("rm","-f",containerName(job.Bot.ID))
 	case "RESTART":
 		return syncAndStart(appDir,job)
+	case "DELETE":
+		return deleteBotWorkspace(appDir,job.Bot.ID)
 	default:
 		return "","",fmt.Errorf("unsupported action %q",job.Action)
 	}
+}
+
+func deleteBotWorkspace(appDir, botID string) (string,string,error) {
+	_,_,_=dockerCommand("rm","-f",containerName(botID))
+	botDir:=filepath.Dir(appDir)
+	if !strings.HasPrefix(filepath.Clean(botDir),"/srv/beakohost/bots/"){return "","",errors.New("unsafe workspace deletion")}
+	if err:=os.RemoveAll(botDir);err!=nil{return "","",err}
+	return "Container e arquivos removidos com segurança","",nil
 }
 
 func syncAndStart(appDir string, job runnerJob) (string,string,error) {
@@ -289,7 +304,7 @@ func runInstall(appDir string, job runnerJob) (string,string,error) {
 	if strings.HasPrefix(job.Bot.Image,"node:") {
 		if fileExists(filepath.Join(appDir,"package-lock.json")) { command=[]string{"sh","-lc","npm ci --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","npm install --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else { return "","",errors.New("package.json não encontrado") }
 	} else {
-		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"pip","install","--no-cache-dir","-r","requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"pip","install","--no-cache-dir","."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
+		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
 	args:=[]string{"run","--rm","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
 	args=append(args,command...)
@@ -303,7 +318,9 @@ func startContainer(appDir string, job runnerJob) (string,string,error) {
 	memory:=fmt.Sprintf("%dm",job.Bot.Limits.MemoryMB)
 	pids:=strconv.Itoa(job.Bot.Limits.PidsLimit)
 	args:=[]string{"run","-d","--name",name,"--restart","unless-stopped","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
-	args=append(args,job.Bot.StartCommand...)
+	startCommand:=append([]string(nil),job.Bot.StartCommand...)
+	if strings.HasPrefix(job.Bot.Image,"python:")&&fileExists(filepath.Join(appDir,".venv","bin","python"))&&len(startCommand)>0 { startCommand[0]=".venv/bin/python" }
+	args=append(args,startCommand...)
 	output,_,err:=dockerCommand(args...)
 	return output,strings.TrimSpace(output),err
 }

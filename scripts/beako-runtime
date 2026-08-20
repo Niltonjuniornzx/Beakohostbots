@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+action="${1:-}"
+image="${2:-}"
+valid_image() { [[ "$1" =~ ^(node:[0-9]+-(alpine|slim)|python:3\.[0-9]+-(alpine|slim))$ ]]; }
+case "$action" in
+  list)
+    docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^(node:[0-9]+-(alpine|slim)|python:3\.[0-9]+-(alpine|slim))$' | sort -u || true
+    ;;
+  install)
+    valid_image "$image" || { echo "Imagem inválida. Exemplo: node:24-alpine ou python:3.13-alpine" >&2; exit 2; }
+    docker pull "$image"
+    systemctl restart beako-runner
+    echo "Runtime $image instalado. O painel será atualizado no próximo heartbeat."
+    ;;
+  remove)
+    valid_image "$image" || { echo "Imagem inválida." >&2; exit 2; }
+    docker image rm "$image"
+    systemctl restart beako-runner
+    echo "Runtime $image removido."
+    ;;
+  *)
+    echo "Uso: sudo beako-runtime {list|install IMAGEM|remove IMAGEM}"
+    exit 2
+    ;;
+esac

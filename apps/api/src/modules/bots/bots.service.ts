@@ -48,6 +48,12 @@ export class BotsService {
       startCommand: input.language === 'NODEJS' ? ['node', input.entrypoint] : ['python', input.entrypoint],
     }, include: { runtime: true } });
   }
+  async deleteBot(userId:string,id:string){
+    const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},select:{id:true,nodeId:true,node:{select:{status:true}}}});
+    if(!bot)throw new NotFoundException('Bot não encontrado');
+    if(bot.nodeId&&bot.node?.status==='ONLINE'){const active=await this.prisma.agentJob.count({where:{botId:id,status:{in:['QUEUED','RUNNING']}}});if(active)throw new BadRequestException('Aguarde a tarefa atual terminar antes de excluir');await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'DELETE'}});await this.prisma.bot.update({where:{id},data:{status:'STOPPING'}});return{success:true,queued:true}}
+    await this.prisma.bot.delete({where:{id}});return{success:true,queued:false}
+  }
   async files(userId:string,id:string){await this.ownedBot(userId,id);const files=await this.prisma.botFile.findMany({where:{botId:id},select:{id:true,path:true,byteSize:true,updatedAt:true},orderBy:{path:'asc'}});return files.map(file=>file.path.endsWith('/.beako-dir')?{...file,path:file.path.slice(0,-11),isDirectory:true}:{...file,isDirectory:false})}
   async uploadFile(userId:string,id:string,input:BotFileDto){
     await this.ownedBot(userId,id);

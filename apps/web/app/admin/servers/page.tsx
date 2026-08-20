@@ -62,6 +62,11 @@ export default function ServersAdmin() {
       <button type="button" onClick={() => navigator.clipboard.writeText(command)}>Copiar comando</button>
       <p>Execute na raiz do repositório. Expira em 15 minutos e só pode ser usado uma vez. Prefira domínio com HTTPS.</p>
     </div>}
+    <section className="runtimeCommands">
+      <div><small>RUNTIMES DA VPS</small><h2>Gerenciar Node.js e Python</h2><p>Execute na VPS Runner como root. Cada versão permanece isolada em uma imagem Docker.</p></div>
+      {[['Listar instalados','sudo beako-runtime list'],['Instalar Node.js 24','sudo beako-runtime install node:24-alpine'],['Instalar Node.js 22','sudo beako-runtime install node:22-alpine'],['Instalar Python 3.13','sudo beako-runtime install python:3.13-alpine'],['Instalar Python 3.12','sudo beako-runtime install python:3.12-alpine']].map(([label,value])=><article key={value}><span>{label}</span><code>{value}</code><button type="button" onClick={()=>navigator.clipboard.writeText(value)}>Copiar</button></article>)}
+      <p className="runtimeNote">Depois da instalação, aguarde até 30 segundos. A linguagem aparecerá automaticamente em “Criar bot”.</p>
+    </section>
     <div className="listPanel serverList">
       {nodes.length === 0 ? <div className="emptyState"><Server /><h3>Nenhum servidor cadastrado</h3><p>Adicione a primeira VPS executora.</p></div> : nodes.map(node =>
         <div className="listRow" key={node.id}>

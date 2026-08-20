@@ -91,6 +91,7 @@ else
 fi
 
 install -m 0644 services/runner-agent/beako-runner.service /etc/systemd/system/beako-runner.service
+install -m 0755 scripts/beako-runtime /usr/local/bin/beako-runtime
 systemctl daemon-reload
 systemctl enable beako-runner
 systemctl restart beako-runner
