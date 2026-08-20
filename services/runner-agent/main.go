@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.4.0"
+const agentVersion = "0.4.1"
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -265,7 +265,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 func runInstall(appDir string, job runnerJob) (string,string,error) {
 	var command []string
 	if strings.HasPrefix(job.Bot.Image,"node:") {
-		if fileExists(filepath.Join(appDir,"package-lock.json")) { command=[]string{"npm","ci","--omit=dev"} } else if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"npm","install","--omit=dev"} } else { return "","",errors.New("package.json não encontrado") }
+		if fileExists(filepath.Join(appDir,"package-lock.json")) { command=[]string{"sh","-lc","npm ci --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","npm install --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else { return "","",errors.New("package.json não encontrado") }
 	} else {
 		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"pip","install","--no-cache-dir","-r","requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"pip","install","--no-cache-dir","."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
