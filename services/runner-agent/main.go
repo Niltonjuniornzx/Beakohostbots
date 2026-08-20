@@ -23,7 +23,7 @@ import (
 
 const agentVersion = "0.5.0"
 
-var managedRuntimeImages = []string{"node:22-alpine","node:20-alpine","python:3.12-alpine","python:3.11-alpine"}
+var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`

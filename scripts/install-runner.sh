@@ -55,7 +55,7 @@ usermod -aG docker beako-agent
 install -d -m 0750 -o beako-agent -g beako-agent /etc/beakohost /srv/beakohost /srv/beakohost/bots
 
 echo "[BeakoHost] Preparando runtimes oficiais..."
-runtime_images=(node:22-alpine node:20-alpine python:3.12-alpine python:3.11-alpine)
+runtime_images=(node:24-alpine node:22-alpine python:3.13-alpine python:3.12-alpine)
 for runtime_image in "${runtime_images[@]}"; do
   echo "  - $runtime_image"
   pulled="false"
