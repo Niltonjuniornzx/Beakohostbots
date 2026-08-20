@@ -1,0 +1,6 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import PageShell from '../../components/PageShell';
+type BotData={name:string;status:string;entrypoint:string;runtime:{language:string;version:string;variant:string};node:null|{name:string}};
+export default function BotDetail(){const{id}=useParams<{id:string}>();const[bot,setBot]=useState<BotData|null>(null);useEffect(()=>{fetch(`/api/bots/${id}`).then(r=>r.ok?r.json():null).then(setBot)},[id]);return <PageShell>{!bot?<div className="loader"/>:<><header><div><small>BOT</small><h1>{bot.name}</h1><p>{bot.runtime.language==='NODEJS'?'Node.js':'Python'} {bot.runtime.version} · {bot.runtime.variant}</p></div><span className="offline">{bot.status}</span></header><div className="detailGrid"><article><small>ARQUIVO INICIAL</small><b>{bot.entrypoint}</b></article><article><small>SERVIDOR</small><b>{bot.node?.name||'Não atribuído'}</b></article><article><small>STATUS</small><b>{bot.status}</b></article></div><div className="notice"><h3>Próxima etapa</h3><p>O bot foi salvo no banco. Para enviar arquivos e iniciar o container, primeiro conecte uma VPS executora em Servidores.</p></div></>}</PageShell>}
