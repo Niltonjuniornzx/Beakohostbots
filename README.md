@@ -29,6 +29,24 @@ pnpm dev
 Painel: `http://localhost:3000`  
 API: `http://localhost:3001/api/health`
 
+## Instalação fácil em VPS
+
+Em Ubuntu 22.04/24.04 ou Debian 12:
+
+```bash
+git clone https://github.com/Niltonjuniornzx/Beakohostbots.git
+cd Beakohostbots
+sudo bash install.sh
+```
+
+O instalador pergunta o domínio, instala Docker, gera todos os segredos e inicia a stack. Depois use:
+
+```bash
+sudo beakoctl
+```
+
+O menu permite ver status/logs, reiniciar, atualizar e configurar domínio com HTTPS automático. Para repositório privado, clone usando uma chave SSH ou token de acesso do GitHub.
+
 ## Estado
 
 Esta primeira entrega contém a fundação executável: monorepo, painel, API, banco completo, contratos e agente com registro seguro. O roadmap está em `docs/ROADMAP.md`.

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+readonly DIR="/opt/beakohost"
+readonly COMPOSE=(docker compose --env-file "${DIR}/.env" -f "${DIR}/docker-compose.prod.yml")
+[[ ${EUID} -eq 0 ]] || { echo "Execute: sudo beakoctl"; exit 1; }
+[[ -f "${DIR}/.env" ]] || { echo "BeakoHost não está instalado em ${DIR}."; exit 1; }
+
+set_domain() {
+  read -r -p "Novo domínio (sem https://): " domain
+  [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]] || { echo "Domínio inválido."; return; }
+  sed -i "s|^PANEL_DOMAIN=.*|PANEL_DOMAIN=${domain}|;s|^PUBLIC_URL=.*|PUBLIC_URL=https://${domain}|" "${DIR}/.env"
+  "${COMPOSE[@]}" up -d --force-recreate caddy api web
+  echo "Domínio alterado. Aponte o DNS para esta VPS; Caddy cuidará do HTTPS."
+}
+
+update_panel() {
+  [[ -d "${DIR}/.git" ]] || { echo "Instalação feita por arquivo/ZIP. Atualize copiando uma versão nova e execute instalar novamente."; return; }
+  cd "${DIR}"
+  git pull --ff-only
+  "${COMPOSE[@]}" up -d --build
+}
+
+while true; do
+  clear || true
+  cat <<'MENU'
+
+  BeakoHost Bots
+  ===============
+  1) Status dos serviços
+  2) Ver logs
+  3) Reiniciar painel
+  4) Alterar domínio / ativar HTTPS
+  5) Atualizar painel
+  6) Parar painel
+  7) Iniciar painel
+  0) Sair
+
+MENU
+  read -r -p "Escolha: " option
+  case "$option" in
+    1) "${COMPOSE[@]}" ps ;;
+    2) "${COMPOSE[@]}" logs -f --tail=200 ;;
+    3) "${COMPOSE[@]}" restart ;;
+    4) set_domain ;;
+    5) update_panel ;;
+    6) "${COMPOSE[@]}" stop ;;
+    7) "${COMPOSE[@]}" up -d ;;
+    0) exit 0 ;;
+    *) echo "Opção inválida." ;;
+  esac
+  read -r -p "Pressione Enter para continuar..." _
+done
