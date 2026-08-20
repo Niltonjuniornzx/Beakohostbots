@@ -313,6 +313,18 @@ model ResourceEvent {
   @@index([botId, createdAt(sort: Desc)])
 }
 
+model AppSetting {
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique
+  encryptedValue Bytes
+  iv Bytes
+  authTag Bytes
+  keyVersion Int @default(1)
+  isSecret Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
 model EnvVariable {
   id String @id @default(uuid()) @db.Uuid
   botId String @db.Uuid

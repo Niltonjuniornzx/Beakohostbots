@@ -38,3 +38,10 @@ export class SavePlanDto extends UserLimitsDto {
 }
 
 export class AssignPlanDto { @IsOptional() @IsString() planId?: string; }
+
+export class DiscordSettingsDto {
+  @IsBoolean() enabled!: boolean;
+  @IsString() @MinLength(10) @MaxLength(40) clientId!: string;
+  @IsOptional() @IsString() @MinLength(20) @MaxLength(200) clientSecret?: string;
+  @IsString() @MinLength(10) @MaxLength(500) redirectUri!: string;
+}
