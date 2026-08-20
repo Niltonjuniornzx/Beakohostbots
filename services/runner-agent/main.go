@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.8.0"
+const agentVersion = "0.8.1"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -259,11 +259,11 @@ func executeJob(job runnerJob) (string,string,error) {
 	case "INSTALL":
 		return runInstall(appDir,job)
 	case "START":
-		return syncAndStart(appDir,job)
+		return deployBot(appDir,job)
 	case "STOP":
 		return dockerCommand("rm","-f",containerName(job.Bot.ID))
 	case "RESTART":
-		return syncAndStart(appDir,job)
+		return deployBot(appDir,job)
 	case "DELETE":
 		return deleteBotWorkspace(appDir,job.Bot.ID)
 	case "DEPLOY":
@@ -274,6 +274,7 @@ func executeJob(job runnerJob) (string,string,error) {
 }
 
 func deployBot(appDir string, job runnerJob) (string,string,error) {
+	_,_,_=dockerCommand("rm","-f",containerName(job.Bot.ID))
 	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
 	if err!=nil{return syncOutput,"",fmt.Errorf("sincronização falhou: %w",err)}
 	output:=syncOutput
@@ -317,7 +318,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 		if !strings.HasPrefix(filepath.Clean(target),root+string(os.PathSeparator)){return "","",errors.New("path escaped workspace")}
 		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
 		if err=os.MkdirAll(filepath.Dir(target),0750);err!=nil{return "","",err}
-		if err=os.WriteFile(target,data,0640);err!=nil{return "","",err}
+		if err=os.WriteFile(target,data,0644);err!=nil{return "","",err}
 	}
 	return fmt.Sprintf("%d arquivo(s) sincronizado(s)",len(files)),"",nil
 }
@@ -325,7 +326,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 func runInstall(appDir string, job runnerJob) (string,string,error) {
 	var command []string
 	if strings.HasPrefix(job.Bot.Image,"node:") {
-		if fileExists(filepath.Join(appDir,"package-lock.json")) { command=[]string{"sh","-lc","npm ci --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","npm install --omit=dev --no-audit --no-fund || (echo '[BeakoHost] npm falhou; tentando pnpm...' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile)"} } else { return "","",errors.New("package.json não encontrado") }
+		if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"} } else { return "","",errors.New("package.json não encontrado") }
 	} else {
 		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
