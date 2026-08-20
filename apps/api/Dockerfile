@@ -10,7 +10,11 @@ COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/database/prisma packages/database/prisma
-RUN pnpm install --filter @beako/api... --no-frozen-lockfile
+RUN for attempt in 1 2 3 4 5; do \
+      pnpm install --filter @beako/api... --no-frozen-lockfile && exit 0; \
+      echo "Falha ao baixar dependencias (tentativa ${attempt}/5). Tentando novamente..."; \
+      sleep $((attempt * 5)); \
+    done; exit 1
 COPY apps/api apps/api
 RUN pnpm --filter @beako/database generate && pnpm --filter @beako/api build
 

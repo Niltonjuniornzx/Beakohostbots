@@ -8,7 +8,11 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json
-RUN pnpm install --filter @beako/web... --no-frozen-lockfile
+RUN for attempt in 1 2 3 4 5; do \
+      pnpm install --filter @beako/web... --no-frozen-lockfile && exit 0; \
+      echo "Falha ao baixar dependencias (tentativa ${attempt}/5). Tentando novamente..."; \
+      sleep $((attempt * 5)); \
+    done; exit 1
 
 FROM deps AS builder
 COPY apps/web apps/web

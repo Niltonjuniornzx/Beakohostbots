@@ -28,6 +28,17 @@ install_docker() {
   systemctl enable --now docker
 }
 
+check_network() {
+  info "Verificando acesso ao registro de dependências..."
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if getent ahostsv4 registry.npmjs.org >/dev/null 2>&1; then return 0; fi
+    warn "DNS ainda não respondeu (tentativa ${attempt}/5)..."
+    sleep $((attempt * 3))
+  done
+  die "A VPS não conseguiu resolver registry.npmjs.org. Verifique o DNS/rede e execute novamente."
+}
+
 random_hex() { openssl rand -hex "$1"; }
 write_env() {
   local domain="$1" caddy_domain="$1" public_url
@@ -59,6 +70,7 @@ main() {
   domain="${domain:-localhost}"
   [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+(:[0-9]+)?$ ]] || die "Domínio inválido. Informe somente host, sem http:// ou caminhos."
   install_docker
+  check_network
   info "Copiando aplicação para ${INSTALL_DIR}..."
   mkdir -p "${INSTALL_DIR}"
   if [[ "${SOURCE_DIR}" != "${INSTALL_DIR}" ]]; then
