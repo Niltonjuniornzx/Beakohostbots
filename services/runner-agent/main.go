@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.8.2"
+const agentVersion = "0.8.3"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -309,6 +309,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 	root:=filepath.Clean(appDir)
 	if !strings.HasPrefix(root,"/srv/beakohost/bots/") { return "","",errors.New("unsafe workspace") }
 	if err:=os.MkdirAll(root,0750);err!=nil{return "","",err}
+	if err:=os.Chmod(root,0755);err!=nil{return "","",err}
 	entries,err:=os.ReadDir(root);if err!=nil{return "","",err}
 	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".venv" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
 	for _,file:=range files {
@@ -317,7 +318,8 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 		target:=filepath.Join(root,clean)
 		if !strings.HasPrefix(filepath.Clean(target),root+string(os.PathSeparator)){return "","",errors.New("path escaped workspace")}
 		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
-		if err=os.MkdirAll(filepath.Dir(target),0750);err!=nil{return "","",err}
+		if err=os.MkdirAll(filepath.Dir(target),0755);err!=nil{return "","",err}
+		if err=os.Chmod(filepath.Dir(target),0755);err!=nil{return "","",err}
 		if err=os.WriteFile(target,data,0644);err!=nil{return "","",err}
 		if err=os.Chmod(target,0644);err!=nil{return "","",err}
 	}
@@ -331,7 +333,7 @@ func runInstall(appDir string, job runnerJob) (string,string,error) {
 	} else {
 		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
-	args:=[]string{"run","--rm","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
+	args:=[]string{"run","--rm","--user","0:0","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
 	args=append(args,command...)
 	return dockerCommand(args...)
 }
