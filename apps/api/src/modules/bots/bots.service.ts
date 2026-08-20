@@ -17,8 +17,8 @@ export class BotsService {
     const [limit,currentBots]=await Promise.all([this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}}),this.prisma.bot.count({where:{userId}})]);
     const maxBots=limit?.maxBots??5;
     if(currentBots>=maxBots)throw new BadRequestException(`Você atingiu o limite de ${maxBots} bot(s)`);
-    if (input.language === 'NODEJS' && !['20', '22'].includes(input.version)) throw new BadRequestException('Versão Node.js inválida');
-    if (input.language === 'PYTHON' && !['3.11', '3.12'].includes(input.version)) throw new BadRequestException('Versão Python inválida');
+    if (input.language === 'NODEJS' && !['20', '22', '24', '26'].includes(input.version)) throw new BadRequestException('Versão Node.js inválida');
+    if (input.language === 'PYTHON' && !['3.10', '3.11', '3.12', '3.13', '3.14'].includes(input.version)) throw new BadRequestException('Versão Python inválida');
     const slugBase = input.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'bot';
     const slug = `${slugBase}-${Math.random().toString(36).slice(2, 7)}`;
     const runtime = await this.prisma.runtime.upsert({
