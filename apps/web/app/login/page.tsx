@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, LockKeyhole, Mail, User } from 'lucide-react';
+import { Bot, Eye, EyeOff, LockKeyhole, Mail, User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
     Promise.all([fetch('/api/auth/me', { credentials: 'include' }), fetch('/api/auth/setup-status')]).then(async ([me, status]) => {
       if (me.ok) return router.replace('/');
@@ -35,12 +36,12 @@ export default function LoginPage() {
         <form onSubmit={submit}>
           {(needsAdmin || register) && <label>Nome<div><User/><input name="displayName" minLength={2} maxLength={60} required placeholder="Seu nome"/></div></label>}
           <label>E-mail<div><Mail/><input name="email" type="email" required autoComplete="email" placeholder="voce@email.com"/></div></label>
-          <label>Senha<div><LockKeyhole/><input name="password" type="password" minLength={8} required autoComplete={register ? 'new-password' : 'current-password'} placeholder="Mínimo de 8 caracteres"/></div></label>
+          <label>Senha<div><LockKeyhole/><input name="password" type={showPassword ? 'text' : 'password'} minLength={8} required autoComplete={register ? 'new-password' : 'current-password'} placeholder="Mínimo de 8 caracteres"/><button type="button" className="passwordToggle" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?'Ocultar senha':'Mostrar senha'}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label>
           {error && <div className="authError">{error}</div>}
           <button disabled={sending}>{sending ? 'Aguarde...' : needsAdmin ? 'Criar administrador' : register ? 'Criar conta' : 'Entrar'}</button>
         </form>
         {!needsAdmin && <button className="switchAuth" onClick={() => { setRegister(!register); setError(''); }}>{register ? 'Já possui conta? Entrar' : 'Não possui conta? Cadastre-se'}</button>}
-        <div className="oauth"><span>Google e Discord serão habilitados em breve</span></div>
+        <div className="oauth"><span>BeakoHost Beta · recursos novos em desenvolvimento</span></div>
       </>}
     </div></section>
   </main>;

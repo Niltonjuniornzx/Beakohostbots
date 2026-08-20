@@ -1,1 +1,40 @@
-.loading{min-height:100vh;display:grid;place-content:center;justify-items:center;gap:14px}.loader{width:28px;height:28px;border:3px solid #292d3c;border-top-color:#8068ff;border-radius:50%;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.logout{margin-left:auto;background:transparent;padding:7px;color:#7e8699}.logout svg{width:16px}.authPage{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;background:#090b11}.authBrand{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding:clamp(45px,8vw,120px);background:radial-gradient(circle at 20% 40%,#6f50ff24,transparent 36%),#0c0e16;border-right:1px solid #202535}.brandMark{width:62px;height:62px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#856cff,#5635e9);box-shadow:0 18px 60px #7657ff55}.brandMark svg{width:32px}.authBrand h1{font-size:46px;margin:22px 0 8px}.authBrand p{font-size:17px;line-height:1.7;max-width:460px}.authGlow{position:absolute;width:300px;height:300px;border-radius:50%;background:#7254ff22;filter:blur(70px);right:-110px;bottom:-130px}.authPanel{display:grid;place-items:center;padding:30px}.authBox{width:min(420px,100%)}.authBox>small{color:#917eff;letter-spacing:2px;font-size:10px;font-weight:800}.authBox h2{font-size:30px;margin:10px 0 8px}.authBox>p{font-size:14px;margin-bottom:26px;line-height:1.5}.authBox form{display:grid;gap:16px}.authBox label{color:#b2b7c5;font-size:12px;font-weight:600}.authBox label div{height:47px;border:1px solid #292e3d;background:#11141d;border-radius:10px;display:flex;align-items:center;gap:10px;padding:0 13px;margin-top:7px}.authBox label div:focus-within{border-color:#7657ff;box-shadow:0 0 0 3px #7657ff18}.authBox label svg{width:17px;color:#70778a}.authBox input{width:100%;height:100%;border:0;outline:0;background:transparent;color:white;font:inherit}.authBox form>button{justify-content:center;height:46px;margin-top:4px}.authBox form>button:disabled{opacity:.6}.authError{padding:11px 13px;border-radius:8px;background:#ef444419;border:1px solid #ef44443d;color:#ff8585;font-size:12px}.switchAuth{width:100%;justify-content:center;background:transparent;color:#9b88ff;margin-top:13px;font-size:12px}.oauth{text-align:center;border-top:1px solid #202535;margin-top:19px;padding-top:17px;color:#666e81;font-size:10px}.mobileBrand{display:none}.authLoading{display:flex;align-items:center;gap:12px;color:#949bad}@media(max-width:760px){.authPage{grid-template-columns:1fr}.authBrand{display:none}.authPanel{padding:24px}.mobileBrand{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;margin-bottom:42px;color:#eee}.mobileBrand svg{color:#8e78ff}}
+.loading{min-height:100vh;display:grid;place-content:center;justify-items:center;gap:14px}
+.loader{width:28px;height:28px;border:3px solid #292d3c;border-top-color:#8068ff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}
+}
+.logout{margin-left:auto;background:transparent;padding:7px;color:#7e8699}
+.logout svg{width:16px}
+.authPage{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;background:#090b11}
+.authBrand{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding:clamp(45px,8vw,120px);background:radial-gradient(circle at 20% 40%,#6f50ff24,transparent 36%),#0c0e16;border-right:1px solid #202535}
+.brandMark{width:62px;height:62px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#856cff,#5635e9);box-shadow:0 18px 60px #7657ff55}
+.brandMark svg{width:32px}
+.authBrand h1{font-size:46px;margin:22px 0 8px}
+.authBrand p{font-size:17px;line-height:1.7;max-width:460px}
+.authGlow{position:absolute;width:300px;height:300px;border-radius:50%;background:#7254ff22;filter:blur(70px);right:-110px;bottom:-130px}
+.authPanel{display:grid;place-items:center;padding:30px}
+.authBox{width:min(420px,100%)}
+.authBox>small{color:#917eff;letter-spacing:2px;font-size:10px;font-weight:800}
+.authBox h2{font-size:30px;margin:10px 0 8px}
+.authBox>p{font-size:14px;margin-bottom:26px;line-height:1.5}
+.authBox form{display:grid;gap:16px}
+.authBox label{color:#b2b7c5;font-size:12px;font-weight:600}
+.authBox label div{height:47px;border:1px solid #292e3d;background:#11141d;border-radius:10px;display:flex;align-items:center;gap:10px;padding:0 13px;margin-top:7px}
+.authBox label div:focus-within{border-color:#7657ff;box-shadow:0 0 0 3px #7657ff18}
+.authBox label svg{width:17px;color:#70778a}
+.authBox input{width:100%;height:100%;border:0;outline:0;background:transparent;color:white;font:inherit}
+.authBox .passwordToggle{flex:0 0 auto;padding:5px;background:transparent;color:#7f8799}
+.authBox .passwordToggle:hover{color:#b5a8ff}
+.authBox .passwordToggle svg{width:16px;height:16px}
+.authBox form>button{justify-content:center;height:46px;margin-top:4px}
+.authBox form>button:disabled{opacity:.6}
+.authError{padding:11px 13px;border-radius:8px;background:#ef444419;border:1px solid #ef44443d;color:#ff8585;font-size:12px}
+.switchAuth{width:100%;justify-content:center;background:transparent;color:#9b88ff;margin-top:13px;font-size:12px}
+.oauth{text-align:center;border-top:1px solid #202535;margin-top:19px;padding-top:17px;color:#666e81;font-size:10px}
+.mobileBrand{display:none}
+.authLoading{display:flex;align-items:center;gap:12px;color:#949bad}
+@media(max-width:760px){.authPage{grid-template-columns:1fr}
+.authBrand{display:none}
+.authPanel{padding:24px}
+.mobileBrand{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;margin-bottom:42px;color:#eee}
+.mobileBrand svg{color:#8e78ff}
+}

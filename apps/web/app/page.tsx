@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Activity, Bot, Cpu, HardDrive, LogOut, MemoryStick, Plus, Server, Settings, ShieldCheck } from 'lucide-react';
 
-type BotItem = { id: string; name: string; status: string; runtime: { language: string; version: string; variant: string }; node: null | { name: string; status: string } };
+type BotItem = { id: string; name: string; status: string; cpuUsagePercent: number; memoryUsageMb: number; runtime: { language: string; version: string; variant: string }; node: null | { name: string; status: string } };
+
+const statusLabel = (status:string) => ({RUNNING:'Online',CRASHED:'Com falha',STARTING:'Iniciando',STOPPING:'Parando',STOPPED:'Parado'}[status] ?? status);
 
 export default function Dashboard() {
   const router = useRouter();
@@ -35,14 +37,14 @@ export default function Dashboard() {
       <div className="stats">
         <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length} <em>/ {limits?.maxBots??5}</em></strong></div></article>
         <article><div className="icon blue"><Cpu/></div><div><small>BOTS EXECUTANDO</small><strong>{bots.filter(bot => bot.status === 'RUNNING').length}</strong></div></article>
-        <article><div className="icon green"><MemoryStick/></div><div><small>MEMÓRIA EM USO</small><strong>0 MB</strong></div></article>
+        <article><div className="icon green"><MemoryStick/></div><div><small>MEMÓRIA EM USO</small><strong>{bots.reduce((total,bot)=>total+(bot.memoryUsageMb||0),0)} MB</strong></div></article>
         <article><div className="icon orange"><Server/></div><div><small>NÓS ONLINE</small><strong>{new Set(bots.filter(bot => bot.node?.status === 'ONLINE').map(bot => bot.node?.name)).size}</strong></div></article>
       </div>
       <div className="panelTitle"><div><h2>Seus bots</h2><p>Dados cadastrados na sua conta.</p></div><Link href="/bots">Ver todos →</Link></div>
       {bots.length === 0 ? <div className="emptyState"><Bot/><h3>Nenhum bot criado</h3><p>Crie seu primeiro bot para começar.</p><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></div> : <div className="botGrid">{bots.slice(0, 4).map((bot) => <article className="botCard" key={bot.id}>
-        <div className="botTop"><div className="botIcon"><Bot/></div><div><h3>{bot.name}</h3><p>{bot.runtime.language === 'NODEJS' ? 'Node.js' : 'Python'} {bot.runtime.version} · {bot.runtime.variant}</p></div><span className={bot.status === 'RUNNING' ? 'online' : 'offline'}>{bot.status === 'RUNNING' ? 'Online' : 'Parado'}</span></div>
-        <div className="meter"><label><span>RAM</span><b>0 MB</b></label><i><u style={{width: '0%'}}/></i></div>
-        <div className="botFoot"><span><Cpu/> 0% CPU</span><Link className="manage" href={`/bots/${bot.id}`}>Gerenciar</Link></div>
+        <div className="botTop"><div className="botIcon"><Bot/></div><div><h3>{bot.name}</h3><p>{bot.runtime.language === 'NODEJS' ? 'Node.js' : 'Python'} {bot.runtime.version} · {bot.runtime.variant}</p></div><span className={bot.status === 'RUNNING' ? 'online' : bot.status === 'CRASHED' ? 'failed' : 'offline'}>{statusLabel(bot.status)}</span></div>
+        <div className="meter"><label><span>RAM</span><b>{bot.memoryUsageMb||0} MB</b></label><i><u style={{width: Math.min(100,(bot.memoryUsageMb||0)/256*100)+'%'}}/></i></div>
+        <div className="botFoot"><span><Cpu/> {(bot.cpuUsagePercent||0).toFixed(1)}% CPU</span><Link className="manage" href={`/bots/${bot.id}`}>Gerenciar</Link></div>
       </article>)}</div>}
       {user.role==='ADMIN'&&<div className="node"><div className="nodeHead"><div><Server/><div><h3>Infraestrutura de execução</h3><p>Servidores são controlados somente por administradores.</p></div></div><Link className="manage" href="/admin/servers">Gerenciar</Link></div></div>}
     </section>

@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.9.0"
+const agentVersion = "0.10.0"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -298,6 +298,7 @@ func deployBot(appDir string, job runnerJob) (string,string,error) {
 	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
 	if err!=nil{return syncOutput,"",fmt.Errorf("sincronização falhou: %w",err)}
 	output:=syncOutput
+	if err:=validateEntrypoint(appDir,job.Bot.Entrypoint);err!=nil{return output,"",err}
 	hasManifest:=strings.HasPrefix(job.Bot.Image,"node:")&&fileExists(filepath.Join(appDir,"package.json"))||strings.HasPrefix(job.Bot.Image,"python:")&&(fileExists(filepath.Join(appDir,"requirements.txt"))||fileExists(filepath.Join(appDir,"pyproject.toml")))
 	if hasManifest {installOutput,_,installErr:=runInstall(appDir,job);output+="\n"+installOutput;if installErr!=nil{return output,"",fmt.Errorf("instalação automática falhou: %w",installErr)}}
 	startOutput,containerID,startErr:=startContainer(appDir,job);if startOutput!=""{output+="\n"+startOutput}
@@ -364,12 +365,27 @@ func startContainer(appDir string, job runnerJob) (string,string,error) {
 	cpu:=fmt.Sprintf("%.3f",float64(job.Bot.Limits.CPUMillicores)/1000)
 	memory:=fmt.Sprintf("%dm",job.Bot.Limits.MemoryMB)
 	pids:=strconv.Itoa(job.Bot.Limits.PidsLimit)
-	args:=[]string{"run","-d","--name",name,"--restart","unless-stopped","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
+	args:=[]string{"run","-d","--name",name,"--restart","on-failure:5","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
 	startCommand:=append([]string(nil),job.Bot.StartCommand...)
 	if strings.HasPrefix(job.Bot.Image,"python:")&&fileExists(filepath.Join(appDir,".venv","bin","python"))&&len(startCommand)>0 { startCommand[0]=".venv/bin/python" }
 	args=append(args,startCommand...)
 	output,_,err:=dockerCommand(args...)
 	return output,strings.TrimSpace(output),err
+}
+
+func validateEntrypoint(appDir, entrypoint string) error {
+	clean:=filepath.Clean(entrypoint)
+	if clean=="."||filepath.IsAbs(clean)||clean==".."||strings.HasPrefix(clean,".."+string(os.PathSeparator)){
+		return fmt.Errorf("arquivo inicial %q é inválido",entrypoint)
+	}
+	target:=filepath.Join(appDir,clean)
+	if !strings.HasPrefix(filepath.Clean(target),filepath.Clean(appDir)+string(os.PathSeparator)){
+		return fmt.Errorf("arquivo inicial %q está fora da pasta do bot",entrypoint)
+	}
+	if !fileExists(target){
+		return fmt.Errorf("arquivo inicial %q não encontrado; envie o arquivo ou ajuste a inicialização antes de iniciar",entrypoint)
+	}
+	return nil
 }
 
 func dockerCommand(args ...string)(string,string,error){
