@@ -47,6 +47,9 @@ services:
       ENV_MASTER_KEY_FILE: /run/secrets/env-master-key
       ENV_MASTER_KEY_VERSION: ${ENV_MASTER_KEY_VERSION:-1}
       AGENT_ENROLLMENT_SECRET: ${AGENT_ENROLLMENT_SECRET:?missing AGENT_ENROLLMENT_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

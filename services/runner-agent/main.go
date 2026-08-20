@@ -244,8 +244,14 @@ type runnerJob struct {
 		Environment  []jobEnv  `json:"environment"`
 		Limits       struct {
 			CPUMillicores int `json:"cpuMillicores"`
-			MemoryMB      int `json:"memoryMb"`
-			PidsLimit     int `json:"pidsLimit"`
+			MemoryMB int `json:"memoryMb"`
+			MemorySwapMB int `json:"memorySwapMb"`
+			DiskMB int `json:"diskMb"`
+			PidsLimit int `json:"pidsLimit"`
+			MaxUploadMB int `json:"maxUploadMb"`
+			RestartPolicy string `json:"restartPolicy"`
+			MaxRestartCount int `json:"maxRestartCount"`
+			CrashLoopWindowSeconds int `json:"crashLoopWindowSeconds"`
 		} `json:"limits"`
 	} `json:"bot"`
 }
@@ -289,15 +295,17 @@ func publishTelemetry(cfg config, botID string) {
 		return
 	}
 	name := containerName(botID)
-	inspect, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}|{{.State.ExitCode}}", name).CombinedOutput()
+	inspect, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}|{{.State.ExitCode}}|{{.State.OOMKilled}}", name).CombinedOutput()
 	running := false
 	exitCode := 0
+	oomKilled := false
 	if err == nil {
 		parts := strings.Split(strings.TrimSpace(string(inspect)), "|")
 		running = len(parts) > 0 && parts[0] == "true"
 		if len(parts) > 1 {
 			exitCode, _ = strconv.Atoi(parts[1])
 		}
+		if len(parts) > 2 { oomKilled = parts[2] == "true" }
 	}
 	logs, _ := exec.Command("docker", "logs", "--tail", "250", "--timestamps", name).CombinedOutput()
 	cpuPercent := 0.0
@@ -313,9 +321,13 @@ func publishTelemetry(cfg config, botID string) {
 			}
 		}
 	}
-	payload := map[string]any{"running": running, "exitCode": exitCode, "logs": string(logs), "cpuUsagePercent": cpuPercent, "memoryUsageMb": memoryUsageMB, "diskUsageMb": workspaceSizeMB(filepath.Join("/srv/beakohost/bots", botID))}
-	if err := postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry", cfg.AgentToken, payload, nil); err != nil {
+	ingressBytes, egressBytes := containerNetworkBytes(name)
+	payload := map[string]any{"running": running, "exitCode": exitCode, "oomKilled":oomKilled, "logs": string(logs), "cpuUsagePercent": cpuPercent, "memoryUsageMb": memoryUsageMB, "diskUsageMb": workspaceSizeMB(filepath.Join("/srv/beakohost/bots", botID)), "networkIngressBytes":ingressBytes,"networkEgressBytes":egressBytes}
+	var response struct{ Action string `json:"action"` }
+	if err := postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry", cfg.AgentToken, payload, &response); err != nil {
 		log.Printf("telemetry failed for %s: %v", botID, err)
+	} else if response.Action == "STOP" {
+		_, _, _ = stopContainer(botID)
 	}
 }
 
@@ -332,6 +344,18 @@ func parseDockerSize(value string) int {
 		}
 	}
 	return 0
+}
+
+func dockerSizeBytes(value string) int64 {
+	value = strings.TrimSpace(value)
+	units := []struct{ suffix string; multiplier float64 }{{"GiB",1073741824},{"MiB",1048576},{"KiB",1024},{"GB",1e9},{"MB",1e6},{"kB",1e3},{"B",1}}
+	for _, unit := range units { if strings.HasSuffix(value, unit.suffix) { number,_:=strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value,unit.suffix)),64); return int64(number*unit.multiplier) } }
+	return 0
+}
+
+func containerNetworkBytes(name string) (int64,int64) {
+	output,err:=exec.Command("docker","stats","--no-stream","--format","{{.NetIO}}",name).Output();if err!=nil{return 0,0}
+	parts:=strings.Split(strings.TrimSpace(string(output)),"/");if len(parts)!=2{return 0,0};return dockerSizeBytes(parts[0]),dockerSizeBytes(parts[1])
 }
 
 func workspaceSizeMB(root string) int {
@@ -368,6 +392,8 @@ func executeJob(job runnerJob) (string, string, error) {
 		return deleteBotWorkspace(appDir, job.Bot.ID)
 	case "DEPLOY":
 		return deployBot(appDir, job)
+	case "RECONCILE":
+		return deployBot(appDir, job)
 	default:
 		return "", "", fmt.Errorf("unsupported action %q", job.Action)
 	}
@@ -384,6 +410,7 @@ func stopContainer(botID string) (string, string, error) {
 
 func deployBot(appDir string, job runnerJob) (string, string, error) {
 	_, _, _ = dockerCommand("rm", "-f", containerName(job.Bot.ID))
+	if err := enforceDiskLimit(appDir, job.Bot.Limits.DiskMB); err != nil { return "", "", err }
 	syncOutput, _, err := syncFiles(appDir, job.Bot.Files)
 	if err != nil {
 		return syncOutput, "", fmt.Errorf("sincronização falhou: %w", err)
@@ -488,7 +515,23 @@ func syncFiles(appDir string, files []jobFile) (string, string, error) {
 	return fmt.Sprintf("%d arquivo(s) sincronizado(s)", len(files)), "", nil
 }
 
+func enforceDiskLimit(appDir string, limitMB int) error {
+	if limitMB <= 0 { return errors.New("invalid disk limit") }
+	if workspaceSizeMB(filepath.Dir(appDir)) > limitMB { return fmt.Errorf("cota de disco atingida (%d MB)", limitMB) }
+	// XFS project quota is applied when the host volume supports it. The hard
+	// limit blocks writes from uploads and package installers at filesystem level.
+	if _, err := exec.LookPath("xfs_quota"); err == nil {
+		projectID := 10000
+		for _, c := range filepath.Base(filepath.Dir(appDir)) { projectID = (projectID*33+int(c))%2000000000 }
+		mount := "/srv/beakohost"
+		_, _ = exec.Command("xfs_quota", "-x", "-c", fmt.Sprintf("project -s -p %s %d", filepath.Dir(appDir), projectID), mount).CombinedOutput()
+		if out, err := exec.Command("xfs_quota", "-x", "-c", fmt.Sprintf("limit -p bhard=%dm bsoft=%dm %d", limitMB, limitMB, projectID), mount).CombinedOutput(); err != nil && strings.Contains(string(out), "Function not implemented") { return errors.New("o volume não oferece quota XFS; habilite prjquota ou use um volume compatível") }
+	}
+	return nil
+}
+
 func runInstall(appDir string, job runnerJob) (string, string, error) {
+	if err := enforceDiskLimit(appDir, job.Bot.Limits.DiskMB); err != nil { return "", "", err }
 	_, _, _ = dockerCommand("rm", "-f", containerName(job.Bot.ID))
 	var command []string
 	if strings.HasPrefix(job.Bot.Image, "node:") {
@@ -512,12 +555,14 @@ func runInstall(appDir string, job runnerJob) (string, string, error) {
 }
 
 func startContainer(appDir string, job runnerJob) (string, string, error) {
+	if err := enforceDiskLimit(appDir, job.Bot.Limits.DiskMB); err != nil { return "", "", err }
 	name := containerName(job.Bot.ID)
 	_, _, _ = dockerCommand("rm", "-f", name)
 	cpu := fmt.Sprintf("%.3f", float64(job.Bot.Limits.CPUMillicores)/1000)
 	memory := fmt.Sprintf("%dm", job.Bot.Limits.MemoryMB)
+	memorySwap := fmt.Sprintf("%dm", max(job.Bot.Limits.MemoryMB, job.Bot.Limits.MemorySwapMB))
 	pids := strconv.Itoa(job.Bot.Limits.PidsLimit)
-	args := []string{"run", "-d", "--name", name, "--restart", "on-failure:5", "--network", "bridge", "--cpus", cpu, "--memory", memory, "--pids-limit", pids, "--security-opt", "no-new-privileges", "--cap-drop", "ALL", "-v", appDir + ":/app", "-w", "/app"}
+	args := []string{"run", "-d", "--name", name, "--restart", "no", "--network", "bridge", "--cpus", cpu, "--memory", memory, "--memory-swap", memorySwap, "--pids-limit", pids, "--security-opt", "no-new-privileges", "--cap-drop", "ALL", "-v", appDir + ":/app", "-w", "/app"}
 	envFile, envErr := writeSecretFile(job.Bot.ID, job.Bot.Environment)
 	if envErr != nil {
 		return "", "", envErr

@@ -34,4 +34,7 @@ export class BotTelemetryDto {
   @IsOptional() @IsNumber() @Min(0) @Max(10000) cpuUsagePercent?: number;
   @IsOptional() @IsInt() @Min(0) memoryUsageMb?: number;
   @IsOptional() @IsInt() @Min(0) diskUsageMb?: number;
+  @IsOptional() @IsInt() @Min(0) networkIngressBytes?: number;
+  @IsOptional() @IsInt() @Min(0) networkEgressBytes?: number;
+  @IsOptional() @IsBoolean() oomKilled?: boolean;
 }

@@ -78,6 +78,13 @@ enum AutomaticAction {
   SUSPEND
 }
 
+enum RestartPolicy {
+  NEVER
+  ON_FAILURE
+  ALWAYS
+  UNLESS_STOPPED
+}
+
 model User {
   id String @id @default(uuid()) @db.Uuid
   email String @unique
@@ -95,6 +102,20 @@ model User {
   limits ResourceLimit[]
   alerts Alert[]
   auditEvents AuditLog[] @relation("AuditActor")
+  planId String? @db.Uuid
+  plan ResourcePlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+}
+
+model ResourcePlan {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  description String?
+  isDefault Boolean @default(false)
+  enabled Boolean @default(true)
+  limits ResourceLimit[]
+  users User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model OAuthAccount {
@@ -181,6 +202,10 @@ model Bot {
   memoryUsageMb Int @default(0)
   diskUsageMb Int @default(0)
   lastMetricsAt DateTime?
+  lastNetworkIngressBytes BigInt @default(0)
+  lastNetworkEgressBytes BigInt @default(0)
+  crashCount Int @default(0)
+  crashWindowStartedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -193,6 +218,8 @@ model Bot {
   alerts Alert[]
   files BotFile[]
   jobs AgentJob[]
+  trafficPeriods TrafficPeriod[]
+  resourceEvents ResourceEvent[]
   @@unique([userId, slug])
   @@index([nodeId, status])
 }
@@ -233,9 +260,14 @@ model ResourceLimit {
   scope LimitScope
   userId String? @db.Uuid
   botId String? @db.Uuid
+  planId String? @db.Uuid
   maxBots Int?
   cpuMillicores Int
+  totalCpuMillicores Int?
+  maxCpuPerBotMillicores Int?
   memoryMb Int
+  totalMemoryMb Int?
+  maxMemoryPerBotMb Int?
   memorySwapMb Int
   diskMb BigInt
   bandwidthIngressMb BigInt
@@ -244,10 +276,41 @@ model ResourceLimit {
   pidsLimit Int @default(100)
   maxUploadMb Int @default(100)
   sftpRateKbps Int?
+  restartPolicy RestartPolicy @default(ON_FAILURE)
+  maxRestartCount Int @default(5)
+  crashLoopWindowSeconds Int @default(300)
+  suspendOnTrafficLimit Boolean @default(true)
+  pauseOnCriticalUsage Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   bot Bot? @relation(fields: [botId], references: [id], onDelete: Cascade)
+  plan ResourcePlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  @@index([scope, userId])
+  @@index([scope, planId])
+}
+
+model TrafficPeriod {
+  id String @id @default(uuid()) @db.Uuid
+  botId String @db.Uuid
+  periodStart DateTime
+  ingressBytes BigInt @default(0)
+  egressBytes BigInt @default(0)
+  updatedAt DateTime @updatedAt
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@unique([botId, periodStart])
+  @@index([periodStart])
+}
+
+model ResourceEvent {
+  id String @id @default(uuid()) @db.Uuid
+  botId String @db.Uuid
+  kind String
+  message String
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@index([botId, createdAt(sort: Desc)])
 }
 
 model EnvVariable {
