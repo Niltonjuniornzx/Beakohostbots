@@ -104,7 +104,7 @@ main() {
   info "Construindo e iniciando os serviços..."
   cd "${INSTALL_DIR}"
   docker compose --env-file .env -f docker-compose.prod.yml up -d --build
-  printf '\n${green}Instalação concluída.${reset}\n'
+  printf "\n${green}Instalação concluída.${reset}\n"
   printf 'Painel: %s\n' "$(grep '^PUBLIC_URL=' .env | cut -d= -f2-)"
   printf 'Gerenciamento: sudo beakoctl\n\n'
   if [[ "$domain" != "localhost" ]]; then

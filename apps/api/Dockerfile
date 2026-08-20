@@ -27,6 +27,7 @@ COPY --from=builder --chown=beako:beako /app/node_modules ./node_modules
 COPY --from=builder --chown=beako:beako /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=beako:beako /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=beako:beako /app/packages/database/prisma ./packages/database/prisma
+COPY --from=builder --chown=beako:beako /app/packages/database/node_modules ./packages/database/node_modules
 USER beako
 EXPOSE 3001
-CMD ["sh", "-c", "./node_modules/.bin/prisma db push --schema packages/database/prisma/schema.prisma && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "./packages/database/node_modules/.bin/prisma db push --schema packages/database/prisma/schema.prisma && node apps/api/dist/main.js"]
