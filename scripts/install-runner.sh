@@ -4,12 +4,14 @@ set -Eeuo pipefail
 panel_url=""
 enrollment_token=""
 allow_insecure="false"
+update_only="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --panel) panel_url="${2:-}"; shift 2 ;;
     --token) enrollment_token="${2:-}"; shift 2 ;;
     --allow-insecure) allow_insecure="true"; shift ;;
+    --update) update_only="true"; shift ;;
     *) echo "Argumento desconhecido: $1" >&2; exit 2 ;;
   esac
 done
@@ -18,11 +20,15 @@ if [[ ${EUID} -ne 0 ]]; then
   echo "Execute como root: sudo bash scripts/install-runner.sh ..." >&2
   exit 1
 fi
-if [[ -z "$panel_url" || -z "$enrollment_token" ]]; then
+if [[ "$update_only" == "true" && ! -f /etc/beakohost/runner.json ]]; then
+  echo "Runner ainda não cadastrado. Use --panel e --token na primeira instalação." >&2
+  exit 2
+fi
+if [[ "$update_only" != "true" && ( -z "$panel_url" || -z "$enrollment_token" ) ]]; then
   echo "Uso: sudo bash scripts/install-runner.sh --panel https://painel.exemplo.com --token TOKEN" >&2
   exit 2
 fi
-if [[ "$panel_url" != https://* && "$allow_insecure" != "true" ]]; then
+if [[ "$update_only" != "true" && "$panel_url" != https://* && "$allow_insecure" != "true" ]]; then
   echo "O painel precisa usar HTTPS. Para teste temporário em HTTP, acrescente --allow-insecure." >&2
   exit 2
 fi
@@ -57,16 +63,21 @@ docker run --rm \
   sh -c 'CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/beako-runner .'
 install -m 0755 "$build_dir/beako-runner" /usr/local/bin/beako-runner
 
-echo "[BeakoHost] Registrando esta VPS no painel..."
-runner_args=(--enroll --panel "$panel_url" --config /etc/beakohost/runner.json)
-if [[ "$allow_insecure" == "true" ]]; then runner_args+=(--allow-insecure); fi
-BEAKO_ENROLLMENT_TOKEN="$enrollment_token" runuser -u beako-agent -- /usr/local/bin/beako-runner "${runner_args[@]}"
-chmod 0600 /etc/beakohost/runner.json
-chown beako-agent:beako-agent /etc/beakohost/runner.json
+if [[ "$update_only" != "true" ]]; then
+  echo "[BeakoHost] Registrando esta VPS no painel..."
+  runner_args=(--enroll --panel "$panel_url" --config /etc/beakohost/runner.json)
+  if [[ "$allow_insecure" == "true" ]]; then runner_args+=(--allow-insecure); fi
+  BEAKO_ENROLLMENT_TOKEN="$enrollment_token" runuser -u beako-agent -- /usr/local/bin/beako-runner "${runner_args[@]}"
+  chmod 0600 /etc/beakohost/runner.json
+  chown beako-agent:beako-agent /etc/beakohost/runner.json
+else
+  echo "[BeakoHost] Mantendo a credencial existente do Runner..."
+fi
 
 install -m 0644 services/runner-agent/beako-runner.service /etc/systemd/system/beako-runner.service
 systemctl daemon-reload
-systemctl enable --now beako-runner
+systemctl enable beako-runner
+systemctl restart beako-runner
 
 echo
 echo "Runner conectado com sucesso."
