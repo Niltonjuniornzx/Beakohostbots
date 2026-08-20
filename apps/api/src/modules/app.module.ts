@@ -1,4 +1,6 @@
 import { Controller, Get, Module } from '@nestjs/common';
+import { AuthModule } from './auth/auth.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Controller('health')
 class HealthController {
@@ -7,17 +9,5 @@ class HealthController {
   }
 }
 
-@Controller('architecture')
-class ArchitectureController {
-  @Get() info() {
-    return {
-      controlPlane: ['web', 'api', 'postgres', 'redis'],
-      executionPlane: ['runner-agent', 'docker-rootless', 'bot-containers'],
-      rootPasswordStored: false,
-      nodeTransport: 'mTLS',
-    };
-  }
-}
-
-@Module({ controllers: [HealthController, ArchitectureController] })
+@Module({ imports: [PrismaModule, AuthModule], controllers: [HealthController] })
 export class AppModule {}

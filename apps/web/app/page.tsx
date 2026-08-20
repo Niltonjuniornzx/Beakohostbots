@@ -1,4 +1,8 @@
-import { Activity, Bot, Cpu, HardDrive, MemoryStick, Plus, Server, ShieldCheck } from 'lucide-react';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Activity, Bot, Cpu, HardDrive, LogOut, MemoryStick, Plus, Server, ShieldCheck } from 'lucide-react';
 
 const bots = [
   { name: 'Sticker Downloader', runtime: 'Node.js 22', state: 'Online', ram: '146 / 256 MB', cpu: '4%' },
@@ -6,14 +10,24 @@ const bots = [
 ];
 
 export default function Dashboard() {
+  const router = useRouter();
+  const [user, setUser] = useState<{ displayName: string; role: string } | null>(null);
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
+      if (!response.ok) return router.replace('/login');
+      setUser(await response.json());
+    }).catch(() => router.replace('/login'));
+  }, [router]);
+  async function logout() { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); router.replace('/login'); }
+  if (!user) return <main className="loading"><div className="loader"/><p>Carregando painel...</p></main>;
   return <main className="shell">
     <aside>
       <div className="brand"><div className="logo"><Bot size={23}/></div><div><b>BeakoHost</b><small>Bot Cloud</small></div></div>
       <nav><a className="active"><Activity/>Visão geral</a><a><Bot/>Meus bots</a><a><Server/>Servidores</a><a><HardDrive/>Arquivos</a><a><ShieldCheck/>Segurança</a></nav>
-      <div className="account"><span>NJ</span><div><b>Nilton Junior</b><small>Administrador</small></div></div>
+      <div className="account"><span>{user.displayName.slice(0, 2).toUpperCase()}</span><div><b>{user.displayName}</b><small>{user.role === 'ADMIN' ? 'Administrador' : 'Usuário'}</small></div><button className="logout" onClick={logout} title="Sair"><LogOut/></button></div>
     </aside>
     <section className="content">
-      <header><div><small>PAINEL DE CONTROLE</small><h1>Boa noite, Nilton</h1><p>Seus bots e servidores em um só lugar.</p></div><button><Plus/>Novo bot</button></header>
+      <header><div><small>PAINEL DE CONTROLE</small><h1>Olá, {user.displayName.split(' ')[0]}</h1><p>Seus bots e servidores em um só lugar.</p></div><button><Plus/>Novo bot</button></header>
       <div className="stats">
         <article><div className="icon purple"><Bot/></div><div><small>BOTS ATIVOS</small><strong>1 <em>/ 5</em></strong></div></article>
         <article><div className="icon blue"><Cpu/></div><div><small>CPU EM USO</small><strong>4%</strong></div></article>

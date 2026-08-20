@@ -3,9 +3,11 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './modules/app.module';
+import cookie from '@fastify/cookie';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+  await app.register(cookie, { secret: process.env.JWT_SECRET });
   app.setGlobalPrefix('api');
   app.enableCors({ origin: process.env.WEB_URL ?? 'http://localhost:3000', credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
