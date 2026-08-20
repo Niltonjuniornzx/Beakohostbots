@@ -40,7 +40,17 @@ export class BotsService {
     const nodes=await this.prisma.executionNode.findMany({
       where:{status:'ONLINE'},
       include:{
-        bots:{select:{limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1},plan:{select:{limits:{where:{scope:'PLAN'},take:1}}}}}},
+        bots:{
+          select:{
+            limits:{where:{scope:'BOT'},take:1},
+            user:{
+              select:{
+                limits:{where:{scope:'USER'},take:1},
+                plan:{select:{limits:{where:{scope:'PLAN'},take:1}}},
+              },
+            },
+          },
+        },
         _count:{select:{bots:true}},
       },
     });
