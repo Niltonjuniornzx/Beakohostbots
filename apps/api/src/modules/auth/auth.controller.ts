@@ -19,5 +19,6 @@ export class AuthController {
     const result = await this.auth.login(input); setSessionCookie(reply, result.token); return { user: result.user };
   }
   @UseGuards(AuthGuard) @Get('me') me(@Req() request: FastifyRequest & { user: SessionUser }) { return this.auth.me(request.user.sub); }
+  @UseGuards(AuthGuard) @Get('me/limits') limits(@Req() request: FastifyRequest & { user: SessionUser }) { return this.auth.limits(request.user.sub); }
   @Post('logout') logout(@Res({ passthrough: true }) reply: FastifyReply) { reply.clearCookie('beako_session', { path: '/' }); return { success: true }; }
 }

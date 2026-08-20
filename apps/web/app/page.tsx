@@ -11,12 +11,15 @@ export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<{ displayName: string; role: string } | null>(null);
   const [bots, setBots] = useState<BotItem[]>([]);
+  const [limits, setLimits] = useState<{maxBots:number}|null>(null);
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
       if (!response.ok) return router.replace('/login');
       setUser(await response.json());
       const botsResponse = await fetch('/api/bots', { credentials: 'include' });
       if (botsResponse.ok) setBots(await botsResponse.json());
+      const limitsResponse = await fetch('/api/auth/me/limits', { credentials: 'include' });
+      if (limitsResponse.ok) setLimits(await limitsResponse.json());
     }).catch(() => router.replace('/login'));
   }, [router]);
   async function logout() { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); router.replace('/login'); }
@@ -30,7 +33,7 @@ export default function Dashboard() {
     <section className="content">
       <header><div><small>PAINEL DE CONTROLE</small><h1>Olá, {user.displayName.split(' ')[0]}</h1><p>Seus bots e servidores em um só lugar.</p></div><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></header>
       <div className="stats">
-        <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length} <em>/ 5</em></strong></div></article>
+        <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length} <em>/ {limits?.maxBots??5}</em></strong></div></article>
         <article><div className="icon blue"><Cpu/></div><div><small>BOTS EXECUTANDO</small><strong>{bots.filter(bot => bot.status === 'RUNNING').length}</strong></div></article>
         <article><div className="icon green"><MemoryStick/></div><div><small>MEMÓRIA EM USO</small><strong>0 MB</strong></div></article>
         <article><div className="icon orange"><Server/></div><div><small>NÓS ONLINE</small><strong>{new Set(bots.filter(bot => bot.node?.status === 'ONLINE').map(bot => bot.node?.name)).size}</strong></div></article>

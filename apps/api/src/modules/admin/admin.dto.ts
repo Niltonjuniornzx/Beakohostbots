@@ -13,3 +13,16 @@ export class UpdateUserDto {
   @IsIn(['USER', 'ADMIN']) role!: 'USER'|'ADMIN';
 }
 export class MoveBotDto { @IsString() nodeId!: string; }
+export class UserLimitsDto {
+  @IsInt() @Min(0) @Max(1000) maxBots!: number;
+  @IsInt() @Min(10) @Max(256000) cpuMillicores!: number;
+  @IsInt() @Min(32) @Max(2097152) memoryMb!: number;
+  @IsInt() @Min(32) @Max(2097152) memorySwapMb!: number;
+  @IsInt() @Min(10) diskMb!: number;
+  @IsInt() @Min(0) bandwidthIngressMb!: number;
+  @IsInt() @Min(0) bandwidthEgressMb!: number;
+  @IsInt() @Min(0) networkRateKbps!: number;
+  @IsInt() @Min(10) @Max(100000) pidsLimit!: number;
+  @IsInt() @Min(1) @Max(102400) maxUploadMb!: number;
+  @IsInt() @Min(0) sftpRateKbps!: number;
+}

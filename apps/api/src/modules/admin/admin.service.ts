@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateNodeDto, MoveBotDto, UpdateNodeDto, UpdateUserDto } from './admin.dto';
+import { CreateNodeDto, MoveBotDto, UpdateNodeDto, UpdateUserDto, UserLimitsDto } from './admin.dto';
 
 @Injectable()
 export class AdminService {
@@ -15,6 +15,8 @@ export class AdminService {
     if(actorId===id&&(input.role!=='ADMIN'||input.status!=='ACTIVE'))throw new BadRequestException('Você não pode remover ou suspender seu próprio acesso administrativo');
     return this.prisma.user.update({where:{id},data:{role:input.role,status:input.status},select:{id:true,email:true,displayName:true,role:true,status:true}}).catch(()=>{throw new NotFoundException('Usuário não encontrado')});
   }
+  async userDetail(id:string){const user=await this.prisma.user.findUnique({where:{id},select:{id:true,email:true,displayName:true,role:true,status:true,createdAt:true,lastLoginAt:true,bots:{include:{runtime:true,node:{select:{id:true,name:true}}},orderBy:{createdAt:'desc'}},limits:{where:{scope:'USER'},take:1}}});if(!user)throw new NotFoundException('Usuário não encontrado');return{...user,limits:user.limits.map(limit=>({...limit,diskMb:limit.diskMb.toString(),bandwidthIngressMb:limit.bandwidthIngressMb.toString(),bandwidthEgressMb:limit.bandwidthEgressMb.toString()}))}}
+  async saveUserLimits(userId:string,input:UserLimitsDto){if(!await this.prisma.user.count({where:{id:userId}}))throw new NotFoundException('Usuário não encontrado');const existing=await this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}});const data={scope:'USER' as const,userId,maxBots:input.maxBots,cpuMillicores:input.cpuMillicores,memoryMb:input.memoryMb,memorySwapMb:input.memorySwapMb,diskMb:BigInt(input.diskMb),bandwidthIngressMb:BigInt(input.bandwidthIngressMb),bandwidthEgressMb:BigInt(input.bandwidthEgressMb),networkRateKbps:input.networkRateKbps||null,pidsLimit:input.pidsLimit,maxUploadMb:input.maxUploadMb,sftpRateKbps:input.sftpRateKbps||null};const limit=existing?await this.prisma.resourceLimit.update({where:{id:existing.id},data}):await this.prisma.resourceLimit.create({data});return{...limit,diskMb:limit.diskMb.toString(),bandwidthIngressMb:limit.bandwidthIngressMb.toString(),bandwidthEgressMb:limit.bandwidthEgressMb.toString()}}
   async nodes(){const nodes=await this.prisma.executionNode.findMany({include:{_count:{select:{bots:true}}},orderBy:{createdAt:'desc'}});return nodes.map(node=>({...node,totalDiskMb:node.totalDiskMb.toString()}))}
   async createNode(input:CreateNodeDto){
     const token=randomBytes(32).toString('base64url'); const tokenHash=createHash('sha256').update(token).digest('hex');

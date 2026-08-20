@@ -14,6 +14,9 @@ export class BotsService {
     return bot;
   }
   async create(userId: string, input: CreateBotDto) {
+    const [limit,currentBots]=await Promise.all([this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}}),this.prisma.bot.count({where:{userId}})]);
+    const maxBots=limit?.maxBots??5;
+    if(currentBots>=maxBots)throw new BadRequestException(`Você atingiu o limite de ${maxBots} bot(s)`);
     if (input.language === 'NODEJS' && !['20', '22'].includes(input.version)) throw new BadRequestException('Versão Node.js inválida');
     if (input.language === 'PYTHON' && !['3.11', '3.12'].includes(input.version)) throw new BadRequestException('Versão Python inválida');
     const slugBase = input.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'bot';

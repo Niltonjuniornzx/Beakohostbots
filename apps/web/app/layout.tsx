@@ -3,6 +3,7 @@ import './styles.css';
 import './auth.css';
 import './panel.css';
 import './admin.css';
+import './limits.css';
 
 export const metadata: Metadata = { title: 'BeakoHost', description: 'Hospedagem segura de bots' };
 export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -32,4 +32,5 @@ export class AuthService {
   async me(id: string) {
     return this.prisma.user.findUniqueOrThrow({ where: { id }, select: { id: true, email: true, displayName: true, avatarUrl: true, role: true, status: true } });
   }
+  async limits(id:string){const limit=await this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId:id}});return limit?{maxBots:limit.maxBots??5,cpuMillicores:limit.cpuMillicores,memoryMb:limit.memoryMb,diskMb:limit.diskMb.toString(),bandwidthIngressMb:limit.bandwidthIngressMb.toString(),bandwidthEgressMb:limit.bandwidthEgressMb.toString(),pidsLimit:limit.pidsLimit,maxUploadMb:limit.maxUploadMb}:{maxBots:5,cpuMillicores:250,memoryMb:256,diskMb:'1024',bandwidthIngressMb:'10240',bandwidthEgressMb:'10240',pidsLimit:100,maxUploadMb:100}}
 }
