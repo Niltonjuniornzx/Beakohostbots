@@ -22,6 +22,7 @@ export class BotsController {
   @Post(':id/files/rename') renameEntry(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: RenameEntryDto) { return this.bots.renameEntry(request.user.sub,id,input); }
   @Post(':id/files/extract') extract(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: ExtractArchiveDto) { return this.bots.extractArchive(request.user.sub,id,input); }
   @Post(':id/actions') action(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotActionDto) { return this.bots.action(request.user.sub,id,input.action); }
+  @Post(':id/deploy') deploy(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.autoDeploy(request.user.sub,id); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
   @Get(':id/dependencies') dependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.dependencies(request.user.sub,id); }
   @Post(':id/dependencies/install') installDependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: InstallDependenciesDto) { return this.bots.installDependencies(request.user.sub,id,input.packages); }

@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.7.0"
+const agentVersion = "0.8.0"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -266,9 +266,21 @@ func executeJob(job runnerJob) (string,string,error) {
 		return syncAndStart(appDir,job)
 	case "DELETE":
 		return deleteBotWorkspace(appDir,job.Bot.ID)
+	case "DEPLOY":
+		return deployBot(appDir,job)
 	default:
 		return "","",fmt.Errorf("unsupported action %q",job.Action)
 	}
+}
+
+func deployBot(appDir string, job runnerJob) (string,string,error) {
+	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
+	if err!=nil{return syncOutput,"",fmt.Errorf("sincronização falhou: %w",err)}
+	output:=syncOutput
+	hasManifest:=strings.HasPrefix(job.Bot.Image,"node:")&&fileExists(filepath.Join(appDir,"package.json"))||strings.HasPrefix(job.Bot.Image,"python:")&&(fileExists(filepath.Join(appDir,"requirements.txt"))||fileExists(filepath.Join(appDir,"pyproject.toml")))
+	if hasManifest {installOutput,_,installErr:=runInstall(appDir,job);output+="\n"+installOutput;if installErr!=nil{return output,"",fmt.Errorf("instalação automática falhou: %w",installErr)}}
+	startOutput,containerID,startErr:=startContainer(appDir,job);if startOutput!=""{output+="\n"+startOutput}
+	return output,containerID,startErr
 }
 
 func deleteBotWorkspace(appDir, botID string) (string,string,error) {

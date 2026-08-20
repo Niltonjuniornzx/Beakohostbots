@@ -43,8 +43,9 @@ export class AgentsService {
       if(input.success&&job.action==='START')await tx.bot.update({where:{id:job.botId},data:{status:'RUNNING',containerId:input.containerId,lastStartedAt:new Date()}});
       if(input.success&&job.action==='STOP')await tx.bot.update({where:{id:job.botId},data:{status:'STOPPED',containerId:null,lastStoppedAt:new Date()}});
       if(input.success&&job.action==='RESTART')await tx.bot.update({where:{id:job.botId},data:{status:'RUNNING',containerId:input.containerId,lastStartedAt:new Date()}});
+      if(input.success&&job.action==='DEPLOY')await tx.bot.update({where:{id:job.botId},data:{status:'RUNNING',containerId:input.containerId,lastStartedAt:new Date()}});
       if(input.success&&job.action==='DELETE'){await tx.bot.delete({where:{id:job.botId}});return}
-      if(!input.success&&(job.action==='START'||job.action==='RESTART'))await tx.bot.update({where:{id:job.botId},data:{status:'CRASHED'}});
+      if(!input.success&&(job.action==='START'||job.action==='RESTART'||job.action==='DEPLOY'))await tx.bot.update({where:{id:job.botId},data:{status:'CRASHED'}});
     });
     return{ok:true};
   }
