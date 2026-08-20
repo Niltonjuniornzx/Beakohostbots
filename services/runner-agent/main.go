@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.8.1"
+const agentVersion = "0.8.2"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -319,6 +319,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
 		if err=os.MkdirAll(filepath.Dir(target),0750);err!=nil{return "","",err}
 		if err=os.WriteFile(target,data,0644);err!=nil{return "","",err}
+		if err=os.Chmod(target,0644);err!=nil{return "","",err}
 	}
 	return fmt.Sprintf("%d arquivo(s) sincronizado(s)",len(files)),"",nil
 }
