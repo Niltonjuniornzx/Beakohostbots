@@ -15,16 +15,19 @@ export class AgentsService {
     const agentToken=randomBytes(32).toString('base64url');
     await this.prisma.$transaction([
       this.prisma.nodeEnrollment.update({where:{id:enrollment.id},data:{consumedAt:new Date()}}),
-      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',hostname:input.hostname||enrollment.node.hostname,agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,setupStatus:input.setupStatus,setupLog:input.setupLog?.slice(-50000),lastHeartbeatAt:new Date()}}),
+      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',hostname:input.hostname||enrollment.node.hostname,agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,runnerInstanceId:input.runnerInstanceId,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,setupStatus:input.setupStatus,setupLog:input.setupLog?.slice(-50000),lastHeartbeatAt:new Date()}}),
     ]);
     return{nodeId:enrollment.nodeId,nodeName:enrollment.node.name,agentToken,heartbeatIntervalSeconds:30};
   }
   async heartbeat(authorization:string|undefined,input:HeartbeatDto){
     const node=await this.authenticate(authorization);
-    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,setupStatus:input.setupStatus,setupLog:input.setupLog?.slice(-50000),lastHeartbeatAt:new Date()}});
+    const reconnecting=!node.lastHeartbeatAt||Date.now()-node.lastHeartbeatAt.getTime()>90000||Boolean(input.runnerInstanceId&&input.runnerInstanceId!==node.runnerInstanceId);
+    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,runnerInstanceId:input.runnerInstanceId,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,setupStatus:input.setupStatus,setupLog:input.setupLog?.slice(-50000),lastHeartbeatAt:new Date()}});
     await this.prisma.bot.updateMany({where:{nodeId:null},data:{nodeId:node.id}});
-    const desired=await this.prisma.bot.findMany({where:{nodeId:node.id,status:{in:['RUNNING','STARTING']}},select:{id:true}});
-    for(const bot of desired){const active=await this.prisma.agentJob.count({where:{botId:bot.id,status:{in:['QUEUED','RUNNING']}}});if(!active)await this.prisma.agentJob.create({data:{nodeId:node.id,botId:bot.id,action:'RECONCILE'}})}
+    if(reconnecting){
+      const desired=await this.prisma.bot.findMany({where:{nodeId:node.id,status:{in:['RUNNING','STARTING']}},select:{id:true}});
+      for(const bot of desired){const active=await this.prisma.agentJob.count({where:{botId:bot.id,status:{in:['QUEUED','RUNNING']}}});if(!active)await this.prisma.agentJob.create({data:{nodeId:node.id,botId:bot.id,action:'RECONCILE'}})}
+    }
     return{ok:true,nodeId:node.id,nextHeartbeatSeconds:30};
   }
   async nextJob(authorization:string|undefined){
@@ -68,12 +71,14 @@ export class AgentsService {
     const ingress=BigInt(input.networkIngressBytes??0),egress=BigInt(input.networkEgressBytes??0);
     const deltaIn=ingress>=bot.lastNetworkIngressBytes?ingress-bot.lastNetworkIngressBytes:ingress;
     const deltaOut=egress>=bot.lastNetworkEgressBytes?egress-bot.lastNetworkEgressBytes:egress;
+    const wasRunning=bot.status==='RUNNING';
+    const crashWindowExpired=Boolean(input.running&&bot.crashWindowStartedAt&&now.getTime()-bot.crashWindowStartedAt.getTime()>(bot.limits[0]?.crashLoopWindowSeconds||bot.user.limits[0]?.crashLoopWindowSeconds||bot.user.plan?.limits[0]?.crashLoopWindowSeconds||300)*1000);
     await this.prisma.$transaction(async tx=>{
       await tx.botLogChunk.deleteMany({where:{botId:id}});
       if(input.logs)await tx.botLogChunk.create({data:{botId:id,stream:'combined',content:input.logs.slice(-200000),firstTimestamp:now,lastTimestamp:now,byteSize:Buffer.byteLength(input.logs),expiresAt:new Date(Date.now()+7*86400000)}});
       if(deltaIn||deltaOut)await tx.trafficPeriod.upsert({where:{botId_periodStart:{botId:id,periodStart}},create:{botId:id,periodStart,ingressBytes:deltaIn,egressBytes:deltaOut},update:{ingressBytes:{increment:deltaIn},egressBytes:{increment:deltaOut}}});
-      if(input.oomKilled)await tx.resourceEvent.create({data:{botId:id,kind:'OOM',message:'Container encerrado pelo limite de memória'}});
-      await tx.bot.update({where:{id},data:{cpuUsagePercent:input.cpuUsagePercent??bot.cpuUsagePercent,memoryUsageMb:input.memoryUsageMb??bot.memoryUsageMb,diskUsageMb:input.diskUsageMb??bot.diskUsageMb,lastNetworkIngressBytes:ingress,lastNetworkEgressBytes:egress,lastMetricsAt:now,...(input.running?{status:'RUNNING' as const}:bot.status==='RUNNING'?{status:'CRASHED' as const,lastExitCode:input.exitCode}:{})}});
+      if(input.oomKilled&&wasRunning)await tx.resourceEvent.create({data:{botId:id,kind:'OOM',message:'Container encerrado pelo limite de memória'}});
+      await tx.bot.update({where:{id},data:{cpuUsagePercent:input.cpuUsagePercent??bot.cpuUsagePercent,memoryUsageMb:input.memoryUsageMb??bot.memoryUsageMb,diskUsageMb:input.diskUsageMb??bot.diskUsageMb,lastNetworkIngressBytes:ingress,lastNetworkEgressBytes:egress,lastMetricsAt:now,...(crashWindowExpired?{crashCount:0,crashWindowStartedAt:null}:{}),...(input.running?{status:'RUNNING' as const}:wasRunning?{status:'CRASHED' as const,lastExitCode:input.exitCode}:{})}});
     });
     const limit=bot.limits[0]||bot.user.limits[0]||bot.user.plan?.limits[0];
     const period=await this.prisma.trafficPeriod.findUnique({where:{botId_periodStart:{botId:id,periodStart}}});
@@ -83,6 +88,20 @@ export class AgentsService {
       await this.prisma.bot.update({where:{id},data:{status:'SUSPENDED'}});
       await this.prisma.resourceEvent.create({data:{botId:id,kind:'TRAFFIC_LIMIT',message:'Bot suspenso ao atingir o tráfego mensal'}});
       return{ok:true,action:'STOP'};
+    }
+    if(!input.running&&wasRunning){
+      const policy=limit?.restartPolicy??'ON_FAILURE';
+      const windowMs=(limit?.crashLoopWindowSeconds??300)*1000;
+      const inWindow=Boolean(bot.crashWindowStartedAt&&now.getTime()-bot.crashWindowStartedAt.getTime()<=windowMs);
+      const crashCount=inWindow?bot.crashCount+1:1;
+      const windowStart=inWindow&&bot.crashWindowStartedAt?bot.crashWindowStartedAt:now;
+      if(policy!=='NEVER'&&crashCount<=(limit?.maxRestartCount??5)){
+        const active=await this.prisma.agentJob.count({where:{botId:id,status:{in:['QUEUED','RUNNING']}}});
+        if(!active)await this.prisma.$transaction([this.prisma.bot.update({where:{id},data:{status:'STARTING',crashCount,crashWindowStartedAt:windowStart}}),this.prisma.agentJob.create({data:{nodeId:node.id,botId:id,action:'RESTART'}})]);
+      }else{
+        await this.prisma.bot.update({where:{id},data:{status:'CRASHED',crashCount,crashWindowStartedAt:windowStart}});
+        if(policy!=='NEVER')await this.prisma.resourceEvent.create({data:{botId:id,kind:'CRASH_LOOP',message:`Reinício bloqueado após ${crashCount} falhas em ${Math.round(windowMs/1000)} segundos`}});
+      }
     }
     return{ok:true};
   }

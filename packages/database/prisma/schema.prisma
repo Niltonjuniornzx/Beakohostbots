@@ -137,6 +137,7 @@ model ExecutionNode {
   hostname String
   status NodeStatus @default(PENDING)
   agentVersion String?
+  runnerInstanceId String?
   publicKeyFingerprint String? @unique
   agentTokenHash String?
   totalCpuMillicores Int @default(0)

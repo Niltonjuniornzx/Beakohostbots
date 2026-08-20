@@ -26,6 +26,7 @@ const agentVersion = "0.11.0"
 var secretDirectory = "/run/beakohost/secrets"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
+var runnerInstanceID = loadRunnerInstanceID()
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -36,6 +37,7 @@ type config struct {
 
 type metrics struct {
 	AgentVersion       string   `json:"agentVersion"`
+	RunnerInstanceID   string   `json:"runnerInstanceId"`
 	Hostname           string   `json:"hostname"`
 	TotalCPUMillicores int      `json:"totalCpuMillicores"`
 	TotalMemoryMB      int      `json:"totalMemoryMb"`
@@ -140,7 +142,12 @@ func collectMetrics() metrics {
 	} else if fileExists("/srv/beakohost/.setup-ready") {
 		status = "READY"
 	}
-	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages(), SetupStatus: status, SetupLog: setupLog()}
+	return metrics{AgentVersion: agentVersion, RunnerInstanceID: runnerInstanceID, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages(), SetupStatus: status, SetupLog: setupLog()}
+}
+
+func loadRunnerInstanceID() string {
+	if data, err := os.ReadFile("/proc/sys/kernel/random/boot_id"); err == nil && strings.TrimSpace(string(data)) != "" { return strings.TrimSpace(string(data)) }
+	return fmt.Sprintf("process-%d", time.Now().UnixNano())
 }
 
 func setupLog() string {
