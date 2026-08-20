@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class EnrollAgentDto {
   @IsString() @MinLength(32) token!: string;
@@ -31,4 +31,7 @@ export class BotTelemetryDto {
   @IsBoolean() running!: boolean;
   @IsOptional() @IsInt() exitCode?: number;
   @IsString() @MaxLength(200000) logs!: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(10000) cpuUsagePercent?: number;
+  @IsOptional() @IsInt() @Min(0) memoryUsageMb?: number;
+  @IsOptional() @IsInt() @Min(0) diskUsageMb?: number;
 }

@@ -177,6 +177,10 @@ model Bot {
   lastExitCode Int?
   lastStartedAt DateTime?
   lastStoppedAt DateTime?
+  cpuUsagePercent Float @default(0)
+  memoryUsageMb Int @default(0)
+  diskUsageMb Int @default(0)
+  lastMetricsAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

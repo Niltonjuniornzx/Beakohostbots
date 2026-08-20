@@ -3,7 +3,7 @@ import { builtinModules } from 'module';
 import { posix } from 'path';
 import { unzipSync } from 'fflate';
 import { PrismaService } from '../prisma/prisma.service';
-import { BotFileDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, RenameEntryDto } from './bots.dto';
+import { BotFileDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, RenameEntryDto, UpdateBotLimitsDto } from './bots.dto';
 
 @Injectable()
 export class BotsService {
@@ -18,9 +18,18 @@ export class BotsService {
     return this.prisma.bot.findMany({ where: { userId }, include: { runtime: true, node: { select: { id: true, name: true, status: true } } }, orderBy: { createdAt: 'desc' } });
   }
   async get(userId: string, id: string) {
-    const admin=await this.isAdmin(userId);const bot = await this.prisma.bot.findFirst({ where: { id,...(admin?{}:{userId}) }, include: { runtime: true, node: {select:{id:true,name:true,status:true,agentVersion:true}} } });
+    const admin=await this.isAdmin(userId);const bot = await this.prisma.bot.findFirst({ where: { id,...(admin?{}:{userId}) }, include: { runtime: true, node: {select:{id:true,name:true,status:true,agentVersion:true}}, limits:{where:{scope:'BOT'},take:1}, user:{select:{limits:{where:{scope:'USER'},take:1}}} } });
     if (!bot) throw new NotFoundException('Bot não encontrado');
-    return bot;
+    const plan=bot.user.limits[0],limit=bot.limits[0]||plan;const {limits,user,...safe}=bot;
+    return {...safe,effectiveLimits:{cpuMillicores:limit?.cpuMillicores??250,memoryMb:limit?.memoryMb??256,diskMb:Number(limit?.diskMb??BigInt(1024))},planLimits:{cpuMillicores:plan?.cpuMillicores??250,memoryMb:plan?.memoryMb??256,diskMb:Number(plan?.diskMb??BigInt(1024))}};
+  }
+  async updateLimits(userId:string,id:string,input:UpdateBotLimitsDto){
+    const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},select:{id:true,userId:true}});if(!bot)throw new NotFoundException('Bot não encontrado');
+    const ownerLimit=await this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId:bot.userId}});const ceiling={cpuMillicores:ownerLimit?.cpuMillicores??250,memoryMb:ownerLimit?.memoryMb??256,diskMb:Number(ownerLimit?.diskMb??BigInt(1024))};
+    if(input.cpuMillicores>ceiling.cpuMillicores||input.memoryMb>ceiling.memoryMb||input.diskMb>ceiling.diskMb)throw new BadRequestException(`Limite máximo do plano: ${ceiling.cpuMillicores}m CPU, ${ceiling.memoryMb} MB RAM e ${ceiling.diskMb} MB disco`);
+    const data={scope:'BOT' as const,userId:null,botId:id,maxBots:null,cpuMillicores:input.cpuMillicores,memoryMb:input.memoryMb,memorySwapMb:Math.max(input.memoryMb,ownerLimit?.memorySwapMb??input.memoryMb),diskMb:BigInt(input.diskMb),bandwidthIngressMb:ownerLimit?.bandwidthIngressMb??BigInt(10240),bandwidthEgressMb:ownerLimit?.bandwidthEgressMb??BigInt(10240),networkRateKbps:ownerLimit?.networkRateKbps??null,pidsLimit:ownerLimit?.pidsLimit??100,maxUploadMb:ownerLimit?.maxUploadMb??100,sftpRateKbps:ownerLimit?.sftpRateKbps??null};
+    const existing=await this.prisma.resourceLimit.findFirst({where:{scope:'BOT',botId:id},select:{id:true}});if(existing)await this.prisma.resourceLimit.update({where:{id:existing.id},data});else await this.prisma.resourceLimit.create({data});
+    return{success:true,effectiveLimits:input};
   }
   async create(userId: string, input: CreateBotDto) {
     const [limit,currentBots]=await Promise.all([this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}}),this.prisma.bot.count({where:{userId}})]);

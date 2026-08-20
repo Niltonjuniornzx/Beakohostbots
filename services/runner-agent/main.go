@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.8.4"
+const agentVersion = "0.9.0"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -246,8 +246,22 @@ func publishTelemetry(cfg config, botID string) {
 	running:=false;exitCode:=0
 	if err==nil {parts:=strings.Split(strings.TrimSpace(string(inspect)),"|");running=len(parts)>0&&parts[0]=="true";if len(parts)>1{exitCode,_=strconv.Atoi(parts[1])}}
 	logs,_:=exec.Command("docker","logs","--tail","250","--timestamps",name).CombinedOutput()
-	payload:=map[string]any{"running":running,"exitCode":exitCode,"logs":string(logs)}
+	cpuPercent:=0.0;memoryUsageMB:=0
+	if running {if stats,statsErr:=exec.Command("docker","stats","--no-stream","--format","{{.CPUPerc}}|{{.MemUsage}}",name).Output();statsErr==nil {parts:=strings.Split(strings.TrimSpace(string(stats)),"|");if len(parts)>0{cpuPercent,_=strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(parts[0]),"%"),64)};if len(parts)>1{memoryUsageMB=parseDockerSize(strings.TrimSpace(strings.Split(parts[1],"/")[0]))}}}
+	payload:=map[string]any{"running":running,"exitCode":exitCode,"logs":string(logs),"cpuUsagePercent":cpuPercent,"memoryUsageMb":memoryUsageMB,"diskUsageMb":workspaceSizeMB(filepath.Join("/srv/beakohost/bots",botID))}
 	if err:=postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry",cfg.AgentToken,payload,nil);err!=nil{log.Printf("telemetry failed for %s: %v",botID,err)}
+}
+
+func parseDockerSize(value string) int {
+	value=strings.TrimSpace(value);units:=[]struct{suffix string;multiplier float64}{{"GiB",1024},{"MiB",1},{"KiB",1.0/1024},{"GB",1000.0*1000*1000/(1024*1024)},{"MB",1000.0*1000/(1024*1024)},{"kB",1000.0/(1024*1024)},{"B",1.0/(1024*1024)}}
+	for _,unit:=range units {if strings.HasSuffix(value,unit.suffix){number,_:=strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value,unit.suffix)),64);return max(0,int(number*unit.multiplier))}}
+	return 0
+}
+
+func workspaceSizeMB(root string) int {
+	var total int64
+	_ = filepath.Walk(root,func(_ string,info os.FileInfo,err error)error{if err==nil&&!info.IsDir(){total+=info.Size()};return nil})
+	if total==0{return 0};return int((total+1024*1024-1)/(1024*1024))
 }
 
 func executeJob(job runnerJob) (string,string,error) {

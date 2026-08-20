@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AuthGuard, SessionUser } from '../auth/auth.guard';
-import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, InstallDependenciesDto, RenameEntryDto } from './bots.dto';
+import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, InstallDependenciesDto, RenameEntryDto, UpdateBotLimitsDto } from './bots.dto';
 import { BotsService } from './bots.service';
 
 @UseGuards(AuthGuard)
@@ -23,6 +23,7 @@ export class BotsController {
   @Post(':id/files/extract') extract(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: ExtractArchiveDto) { return this.bots.extractArchive(request.user.sub,id,input); }
   @Post(':id/actions') action(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotActionDto) { return this.bots.action(request.user.sub,id,input.action); }
   @Post(':id/deploy') deploy(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.autoDeploy(request.user.sub,id); }
+  @Patch(':id/limits') limits(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateBotLimitsDto) { return this.bots.updateLimits(request.user.sub,id,input); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
   @Get(':id/dependencies') dependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.dependencies(request.user.sub,id); }
   @Post(':id/dependencies/install') installDependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: InstallDependenciesDto) { return this.bots.installDependencies(request.user.sub,id,input.packages); }
