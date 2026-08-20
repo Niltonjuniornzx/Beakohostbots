@@ -15,17 +15,39 @@ die() { printf "${red}[Erro]${reset} %s\n" "$*" >&2; exit 1; }
 command -v openssl >/dev/null || die "Instale openssl antes de continuar."
 
 install_docker() {
-  if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then return; fi
+  if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+    command -v jq >/dev/null || { apt-get update && apt-get install -y jq; }
+    return
+  fi
   [[ -f /etc/os-release ]] || die "Sistema não reconhecido. Use Ubuntu 22.04/24.04 ou Debian 12."
   . /etc/os-release
   case "${ID:-}" in ubuntu|debian) ;; *) die "Sistema suportado: Ubuntu ou Debian." ;; esac
   info "Instalando Docker e dependências..."
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl docker.io openssl rsync
+  DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl docker.io jq openssl rsync
   if ! apt-get install -y docker-compose-v2; then
     apt-get install -y docker-compose-plugin || die "Não foi possível instalar Docker Compose v2."
   fi
   systemctl enable --now docker
+}
+
+configure_docker_dns() {
+  if docker run --rm busybox nslookup registry.npmjs.org >/dev/null 2>&1; then return 0; fi
+  warn "O DNS interno do Docker não está respondendo. Aplicando correção segura..."
+  mkdir -p /etc/docker
+  local current='{}' temporary
+  if [[ -s /etc/docker/daemon.json ]] && jq empty /etc/docker/daemon.json >/dev/null 2>&1; then
+    current="$(cat /etc/docker/daemon.json)"
+    cp -a /etc/docker/daemon.json "/etc/docker/daemon.json.backup.$(date +%Y%m%d%H%M%S)"
+  fi
+  temporary="$(mktemp)"
+  printf '%s' "$current" | jq '. + {dns: ["1.1.1.1", "8.8.8.8"]}' >"$temporary"
+  install -m 0644 "$temporary" /etc/docker/daemon.json
+  rm -f "$temporary"
+  systemctl restart docker
+  sleep 3
+  docker run --rm busybox nslookup registry.npmjs.org >/dev/null 2>&1 || die "O DNS do Docker continua indisponível. Backup salvo em /etc/docker/daemon.json.backup.*"
+  info "DNS do Docker corrigido."
 }
 
 check_network() {
@@ -71,6 +93,7 @@ main() {
   [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+(:[0-9]+)?$ ]] || die "Domínio inválido. Informe somente host, sem http:// ou caminhos."
   install_docker
   check_network
+  configure_docker_dns
   info "Copiando aplicação para ${INSTALL_DIR}..."
   mkdir -p "${INSTALL_DIR}"
   if [[ "${SOURCE_DIR}" != "${INSTALL_DIR}" ]]; then
