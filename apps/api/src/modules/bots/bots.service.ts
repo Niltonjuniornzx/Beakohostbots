@@ -153,7 +153,16 @@ export class BotsService {
   private async ownedBot(userId:string,id:string){const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},select:{id:true}});if(!bot)throw new NotFoundException('Bot não encontrado');return bot}
   private async isAdmin(userId:string){return Boolean(await this.prisma.user.count({where:{id:userId,role:'ADMIN',status:'ACTIVE'}}))}
   private defaultLimit(){return this.prisma.resourceLimit.findFirst({where:{scope:'PLAN',plan:{isDefault:true,enabled:true}}})}
-  private async effectiveLimitForBot(botId:string){const bot=await this.prisma.bot.findUnique({where:{id:botId},select:{limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1},plan:{select:{limits:{where:{scope:'PLAN'},take:1}}}}}});return bot?.limits[0]||bot?.user.limits[0]||bot?.user.plan?.limits[0]||await this.defaultLimit()}
+  private async effectiveLimitForBot(botId:string){
+    const bot=await this.prisma.bot.findUnique({
+      where:{id:botId},
+      select:{
+        limits:{where:{scope:'BOT'},take:1},
+        user:{select:{limits:{where:{scope:'USER'},take:1},plan:{select:{limits:{where:{scope:'PLAN'},take:1}}}}},
+      },
+    });
+    return bot?.limits[0]||bot?.user.limits[0]||bot?.user.plan?.limits[0]||await this.defaultLimit();
+  }
   private nodeImages(value:unknown){return Array.isArray(value)?value.filter((item):item is string=>typeof item==='string'&&/^(node|python):[a-zA-Z0-9.-]+$/.test(item)):[]}
   private compatibleDependency(name:string){const versions:Record<string,string>={'node-telegram-bot-api':'0.66.0'};return versions[name]||null}
   private sanitizePythonRequirements(lines:string[]){const standard=new Set(['abc','argparse','asyncio','base64','collections','concurrent','contextlib','csv','dataclasses','datetime','decimal','email','enum','functools','glob','hashlib','heapq','html','http','importlib','inspect','io','itertools','json','logging','math','multiprocessing','operator','os','pathlib','pickle','platform','queue','random','re','secrets','shutil','signal','socket','sqlite3','statistics','string','struct','subprocess','sys','tempfile','threading','time','traceback','types','typing','unittest','urllib','uuid','warnings','weakref','xml','zipfile']);return lines.filter(line=>line.startsWith('#')||!standard.has(line.split(/[<>=!~\[]/)[0].trim().toLowerCase()))}
