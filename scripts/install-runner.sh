@@ -7,14 +7,14 @@ allow_insecure="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --panel) panel_url="\${2:-}"; shift 2 ;;
-    --token) enrollment_token="\${2:-}"; shift 2 ;;
+    --panel) panel_url="${2:-}"; shift 2 ;;
+    --token) enrollment_token="${2:-}"; shift 2 ;;
     --allow-insecure) allow_insecure="true"; shift ;;
     *) echo "Argumento desconhecido: $1" >&2; exit 2 ;;
   esac
 done
 
-if [[ \${EUID} -ne 0 ]]; then
+if [[ ${EUID} -ne 0 ]]; then
   echo "Execute como root: sudo bash scripts/install-runner.sh ..." >&2
   exit 1
 fi
@@ -60,7 +60,7 @@ install -m 0755 "$build_dir/beako-runner" /usr/local/bin/beako-runner
 echo "[BeakoHost] Registrando esta VPS no painel..."
 runner_args=(--enroll --panel "$panel_url" --config /etc/beakohost/runner.json)
 if [[ "$allow_insecure" == "true" ]]; then runner_args+=(--allow-insecure); fi
-BEAKO_ENROLLMENT_TOKEN="$enrollment_token" runuser -u beako-agent -- /usr/local/bin/beako-runner "\${runner_args[@]}"
+BEAKO_ENROLLMENT_TOKEN="$enrollment_token" runuser -u beako-agent -- /usr/local/bin/beako-runner "${runner_args[@]}"
 chmod 0600 /etc/beakohost/runner.json
 chown beako-agent:beako-agent /etc/beakohost/runner.json
 
