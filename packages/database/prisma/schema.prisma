@@ -121,6 +121,7 @@ model ExecutionNode {
   totalCpuMillicores Int @default(0)
   totalMemoryMb Int @default(0)
   totalDiskMb BigInt @default(0)
+  runtimeImages Json @default("[]")
   labels Json @default("{}")
   lastHeartbeatAt DateTime?
   createdAt DateTime @default(now())

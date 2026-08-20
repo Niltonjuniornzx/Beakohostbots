@@ -8,6 +8,12 @@ import { BotFileDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, RenameEntr
 @Injectable()
 export class BotsService {
   constructor(private readonly prisma: PrismaService) {}
+  async availableRuntimes(){
+    const nodes=await this.prisma.executionNode.findMany({where:{status:'ONLINE'},select:{runtimeImages:true,lastHeartbeatAt:true}});
+    const counts=new Map<string,number>();
+    for(const node of nodes.filter(node=>node.lastHeartbeatAt&&Date.now()-node.lastHeartbeatAt.getTime()<90000))for(const image of this.nodeImages(node.runtimeImages))counts.set(image,(counts.get(image)||0)+1);
+    return [...counts].map(([image,onlineNodes])=>{const [repository,tag]=image.split(':');const dash=tag.lastIndexOf('-');const version=dash<0?tag:tag.slice(0,dash);const variant=(dash<0?'ALPINE':tag.slice(dash+1).toUpperCase());return{image,language:repository==='node'?'NODEJS':'PYTHON',label:repository==='node'?'Node.js':'Python',version,variant,onlineNodes}}).sort((a,b)=>a.language.localeCompare(b.language)||b.version.localeCompare(a.version));
+  }
   list(userId: string) {
     return this.prisma.bot.findMany({ where: { userId }, include: { runtime: true, node: { select: { id: true, name: true, status: true } } }, orderBy: { createdAt: 'desc' } });
   }
@@ -20,8 +26,10 @@ export class BotsService {
     const [limit,currentBots]=await Promise.all([this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}}),this.prisma.bot.count({where:{userId}})]);
     const maxBots=limit?.maxBots??5;
     if(currentBots>=maxBots)throw new BadRequestException(`Você atingiu o limite de ${maxBots} bot(s)`);
-    if (input.language === 'NODEJS' && !['20', '22', '24', '26'].includes(input.version)) throw new BadRequestException('Versão Node.js inválida');
-    if (input.language === 'PYTHON' && !['3.10', '3.11', '3.12', '3.13', '3.14'].includes(input.version)) throw new BadRequestException('Versão Python inválida');
+    const image=`${input.language==='NODEJS'?'node':'python'}:${input.version}-${input.variant.toLowerCase()}`;
+    const nodes=await this.prisma.executionNode.findMany({where:{status:'ONLINE'},select:{id:true,runtimeImages:true,lastHeartbeatAt:true,_count:{select:{bots:true}}}});
+    const compatible=nodes.filter(node=>node.lastHeartbeatAt&&Date.now()-node.lastHeartbeatAt.getTime()<90000&&this.nodeImages(node.runtimeImages).includes(image)).sort((a,b)=>a._count.bots-b._count.bots);
+    if(!compatible.length)throw new BadRequestException('Nenhum Runner online possui este runtime. Atualize ou prepare uma VPS primeiro.');
     const slugBase = input.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'bot';
     const slug = `${slugBase}-${Math.random().toString(36).slice(2, 7)}`;
     const runtime = await this.prisma.runtime.upsert({
@@ -34,7 +42,7 @@ export class BotsService {
         defaultStartCommand: input.language === 'NODEJS' ? ['node'] : ['python'],
       },
     });
-    const node=await this.prisma.executionNode.findFirst({where:{status:'ONLINE'},orderBy:{bots:{_count:'asc'}}});
+    const node=compatible[0];
     return this.prisma.bot.create({ data: {
       userId, runtimeId: runtime.id, nodeId:node?.id, name: input.name.trim(), slug, entrypoint: input.entrypoint,
       startCommand: input.language === 'NODEJS' ? ['node', input.entrypoint] : ['python', input.entrypoint],
@@ -80,5 +88,6 @@ export class BotsService {
   private async queueSync(id:string){const bot=await this.prisma.bot.findUnique({where:{id},select:{nodeId:true}});if(!bot?.nodeId)return;const active=await this.prisma.agentJob.count({where:{botId:id,action:'SYNC',status:{in:['QUEUED','RUNNING']}}});if(!active)await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}})}
   private async ownedBot(userId:string,id:string){const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},select:{id:true}});if(!bot)throw new NotFoundException('Bot não encontrado');return bot}
   private async isAdmin(userId:string){return Boolean(await this.prisma.user.count({where:{id:userId,role:'ADMIN',status:'ACTIVE'}}))}
+  private nodeImages(value:unknown){return Array.isArray(value)?value.filter((item):item is string=>typeof item==='string'&&/^(node|python):[a-zA-Z0-9.-]+$/.test(item)):[]}
   private safePath(value:string){const normalized=posix.normalize(String(value||'').replace(/\\/g,'/')).replace(/^\.\//,'');if(!normalized||normalized==='.'||normalized.startsWith('/')||normalized==='..'||normalized.startsWith('../')||normalized.includes('/../')||normalized.length>240||!/^[a-zA-Z0-9_./@()+ -]+$/.test(normalized))throw new BadRequestException('Caminho inválido');return normalized}
 }

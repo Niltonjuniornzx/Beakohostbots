@@ -54,6 +54,21 @@ id beako-agent >/dev/null 2>&1 || useradd --system --gid beako-agent --home-dir 
 usermod -aG docker beako-agent
 install -d -m 0750 -o beako-agent -g beako-agent /etc/beakohost /srv/beakohost /srv/beakohost/bots
 
+echo "[BeakoHost] Preparando runtimes oficiais..."
+runtime_images=(node:22-alpine node:20-alpine python:3.12-alpine python:3.11-alpine)
+for runtime_image in "${runtime_images[@]}"; do
+  echo "  - $runtime_image"
+  pulled="false"
+  for attempt in 1 2 3; do
+    if docker pull "$runtime_image"; then pulled="true"; break; fi
+    echo "[Aviso] Tentativa $attempt/3 falhou para $runtime_image."
+  done
+  if [[ "$pulled" != "true" ]]; then
+    echo "Não foi possível preparar o runtime $runtime_image." >&2
+    exit 1
+  fi
+done
+
 echo "[BeakoHost] Compilando o Runner..."
 build_dir="$(mktemp -d)"
 trap 'rm -rf -- "$build_dir"' EXIT

@@ -8,6 +8,7 @@ import { BotsService } from './bots.service';
 @Controller('bots')
 export class BotsController {
   constructor(private readonly bots: BotsService) {}
+  @Get('runtimes') runtimes() { return this.bots.availableRuntimes(); }
   @Get() list(@Req() request: FastifyRequest & { user: SessionUser }) { return this.bots.list(request.user.sub); }
   @Get(':id') get(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.get(request.user.sub, id); }
   @Post() create(@Req() request: FastifyRequest & { user: SessionUser }, @Body() input: CreateBotDto) { return this.bots.create(request.user.sub, input); }

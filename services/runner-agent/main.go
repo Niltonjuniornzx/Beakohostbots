@@ -21,7 +21,9 @@ import (
 	"time"
 )
 
-const agentVersion = "0.4.2"
+const agentVersion = "0.5.0"
+
+var managedRuntimeImages = []string{"node:22-alpine","node:20-alpine","python:3.12-alpine","python:3.11-alpine"}
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -36,6 +38,7 @@ type metrics struct {
 	TotalCPUMillicores int    `json:"totalCpuMillicores"`
 	TotalMemoryMB      int    `json:"totalMemoryMb"`
 	TotalDiskMB        int    `json:"totalDiskMb"`
+	RuntimeImages      []string `json:"runtimeImages"`
 }
 
 type enrollmentRequest struct {
@@ -123,7 +126,13 @@ func heartbeatLoop(cfg config) {
 func collectMetrics() metrics {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" { hostname = "runner-desconhecido" }
-	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost")}
+	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages()}
+}
+
+func availableRuntimeImages() []string {
+	images:=make([]string,0,len(managedRuntimeImages))
+	for _,image:=range managedRuntimeImages { if exec.Command("docker","image","inspect",image).Run()==nil { images=append(images,image) } }
+	return images
 }
 
 func memoryMB() int {

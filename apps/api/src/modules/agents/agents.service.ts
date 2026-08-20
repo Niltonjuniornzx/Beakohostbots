@@ -14,13 +14,13 @@ export class AgentsService {
     const agentToken=randomBytes(32).toString('base64url');
     await this.prisma.$transaction([
       this.prisma.nodeEnrollment.update({where:{id:enrollment.id},data:{consumedAt:new Date()}}),
-      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',hostname:input.hostname||enrollment.node.hostname,agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}}),
+      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',hostname:input.hostname||enrollment.node.hostname,agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,lastHeartbeatAt:new Date()}}),
     ]);
     return{nodeId:enrollment.nodeId,nodeName:enrollment.node.name,agentToken,heartbeatIntervalSeconds:30};
   }
   async heartbeat(authorization:string|undefined,input:HeartbeatDto){
     const node=await this.authenticate(authorization);
-    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}});
+    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),runtimeImages:input.runtimeImages,lastHeartbeatAt:new Date()}});
     await this.prisma.bot.updateMany({where:{nodeId:null},data:{nodeId:node.id}});
     return{ok:true,nodeId:node.id,nextHeartbeatSeconds:30};
   }

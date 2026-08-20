@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class EnrollAgentDto {
   @IsString() @MinLength(32) token!: string;
@@ -7,6 +7,7 @@ export class EnrollAgentDto {
   @IsInt() @Min(100) @Max(256000) totalCpuMillicores!: number;
   @IsInt() @Min(64) @Max(2097152) totalMemoryMb!: number;
   @IsInt() @Min(1024) totalDiskMb!: number;
+  @IsArray() @ArrayMaxSize(30) @IsString({each:true}) runtimeImages!: string[];
 }
 export class HeartbeatDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(255) hostname?: string;
@@ -14,6 +15,7 @@ export class HeartbeatDto {
   @IsInt() @Min(100) totalCpuMillicores!: number;
   @IsInt() @Min(64) totalMemoryMb!: number;
   @IsInt() @Min(1024) totalDiskMb!: number;
+  @IsArray() @ArrayMaxSize(30) @IsString({each:true}) runtimeImages!: string[];
 }
 export class CompleteJobDto {
   @IsBoolean() success!: boolean;
