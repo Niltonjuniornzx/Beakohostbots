@@ -19,6 +19,8 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
+RuntimeDirectory=beakohost
+RuntimeDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target

@@ -63,9 +63,10 @@ export class BotsService {
     if(bot.nodeId&&bot.node?.status==='ONLINE'){const active=await this.prisma.agentJob.count({where:{botId:id,status:{in:['QUEUED','RUNNING']}}});if(active)throw new BadRequestException('Aguarde a tarefa atual terminar antes de excluir');await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'DELETE'}});await this.prisma.bot.update({where:{id},data:{status:'STOPPING'}});return{success:true,queued:true}}
     await this.prisma.bot.delete({where:{id}});return{success:true,queued:false}
   }
-  async files(userId:string,id:string){await this.ownedBot(userId,id);const files=await this.prisma.botFile.findMany({where:{botId:id},select:{id:true,path:true,byteSize:true,updatedAt:true},orderBy:{path:'asc'}});return files.map(file=>file.path.endsWith('/.beako-dir')?{...file,path:file.path.slice(0,-11),isDirectory:true}:{...file,isDirectory:false})}
+  async files(userId:string,id:string){await this.ownedBot(userId,id);const files=await this.prisma.botFile.findMany({where:{botId:id,NOT:{path:{endsWith:'.env'}}},select:{id:true,path:true,byteSize:true,updatedAt:true},orderBy:{path:'asc'}});return files.map(file=>file.path.endsWith('/.beako-dir')?{...file,path:file.path.slice(0,-11),isDirectory:true}:{...file,isDirectory:false})}
   async uploadFile(userId:string,id:string,input:BotFileDto){
     await this.ownedBot(userId,id);
+    this.rejectEnvPath(input.path);
     const content=Buffer.from(input.contentBase64,'base64');
     const limit=await this.prisma.resourceLimit.findFirst({where:{scope:'USER',userId}});
     const maxUpload=(limit?.maxUploadMb??100)*1024*1024;
@@ -132,5 +133,6 @@ export class BotsService {
   private nodeImages(value:unknown){return Array.isArray(value)?value.filter((item):item is string=>typeof item==='string'&&/^(node|python):[a-zA-Z0-9.-]+$/.test(item)):[]}
   private compatibleDependency(name:string){const versions:Record<string,string>={'node-telegram-bot-api':'0.66.0'};return versions[name]||null}
   private sanitizePythonRequirements(lines:string[]){const standard=new Set(['abc','argparse','asyncio','base64','collections','concurrent','contextlib','csv','dataclasses','datetime','decimal','email','enum','functools','glob','hashlib','heapq','html','http','importlib','inspect','io','itertools','json','logging','math','multiprocessing','operator','os','pathlib','pickle','platform','queue','random','re','secrets','shutil','signal','socket','sqlite3','statistics','string','struct','subprocess','sys','tempfile','threading','time','traceback','types','typing','unittest','urllib','uuid','warnings','weakref','xml','zipfile']);return lines.filter(line=>line.startsWith('#')||!standard.has(line.split(/[<>=!~\[]/)[0].trim().toLowerCase()))}
-  private safePath(value:string){const normalized=posix.normalize(String(value||'').replace(/\\/g,'/')).replace(/^\.\//,'');if(!normalized||normalized==='.'||normalized.startsWith('/')||normalized==='..'||normalized.startsWith('../')||normalized.includes('/../')||normalized.length>240||!/^[a-zA-Z0-9_./@()+ -]+$/.test(normalized))throw new BadRequestException('Caminho inválido');return normalized}
+  private safePath(value:string){const normalized=posix.normalize(String(value||'').replace(/\\/g,'/')).replace(/^\.\//,'');if(!normalized||normalized==='.'||normalized.startsWith('/')||normalized==='..'||normalized.startsWith('../')||normalized.includes('/../')||normalized.length>240||!/^[a-zA-Z0-9_./@()+ -]+$/.test(normalized))throw new BadRequestException('Caminho inválido');this.rejectEnvPath(normalized);return normalized}
+  private rejectEnvPath(path:string){if(path.split('/').includes('.env'))throw new BadRequestException('Use a aba Variáveis para configurar segredos; arquivos .env não são permitidos')}
 }

@@ -21,7 +21,9 @@ import (
 	"time"
 )
 
-const agentVersion = "0.10.3"
+const agentVersion = "0.11.0"
+
+var secretDirectory = "/run/beakohost/secrets"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -33,11 +35,11 @@ type config struct {
 }
 
 type metrics struct {
-	AgentVersion       string `json:"agentVersion"`
-	Hostname           string `json:"hostname"`
-	TotalCPUMillicores int    `json:"totalCpuMillicores"`
-	TotalMemoryMB      int    `json:"totalMemoryMb"`
-	TotalDiskMB        int    `json:"totalDiskMb"`
+	AgentVersion       string   `json:"agentVersion"`
+	Hostname           string   `json:"hostname"`
+	TotalCPUMillicores int      `json:"totalCpuMillicores"`
+	TotalMemoryMB      int      `json:"totalMemoryMb"`
+	TotalDiskMB        int      `json:"totalDiskMb"`
 	RuntimeImages      []string `json:"runtimeImages"`
 	SetupStatus        string   `json:"setupStatus"`
 	SetupLog           string   `json:"setupLog,omitempty"`
@@ -110,7 +112,9 @@ func enrollAgent(panelURL, token, configPath string, allowInsecure bool) error {
 
 func heartbeatLoop(cfg config) {
 	for {
-		var response struct{ NextHeartbeatSeconds int `json:"nextHeartbeatSeconds"` }
+		var response struct {
+			NextHeartbeatSeconds int `json:"nextHeartbeatSeconds"`
+		}
 		err := postJSON(cfg.PanelURL+"/api/agents/heartbeat", cfg.AgentToken, collectMetrics(), &response)
 		if err != nil {
 			log.Printf("heartbeat failed: %v", err)
@@ -127,33 +131,49 @@ func heartbeatLoop(cfg config) {
 
 func collectMetrics() metrics {
 	hostname, err := os.Hostname()
-	if err != nil || hostname == "" { hostname = "runner-desconhecido" }
-	status:="INSTALLING"
-	if fileExists("/srv/beakohost/.setup-error"){status="ERROR"} else if fileExists("/srv/beakohost/.setup-ready"){status="READY"}
-	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages(), SetupStatus:status, SetupLog:setupLog()}
+	if err != nil || hostname == "" {
+		hostname = "runner-desconhecido"
+	}
+	status := "INSTALLING"
+	if fileExists("/srv/beakohost/.setup-error") {
+		status = "ERROR"
+	} else if fileExists("/srv/beakohost/.setup-ready") {
+		status = "READY"
+	}
+	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages(), SetupStatus: status, SetupLog: setupLog()}
 }
 
 func setupLog() string {
-	data,err:=os.ReadFile("/var/log/beakohost/setup.log")
-	if err!=nil{return ""}
-	if len(data)>50000{data=data[len(data)-50000:]}
+	data, err := os.ReadFile("/var/log/beakohost/setup.log")
+	if err != nil {
+		return ""
+	}
+	if len(data) > 50000 {
+		data = data[len(data)-50000:]
+	}
 	return string(data)
 }
 
 func availableRuntimeImages() []string {
-	images:=[]string{}
-	output,err:=exec.Command("docker","images","--format","{{.Repository}}:{{.Tag}}").Output()
-	if err!=nil{return images}
-	for _,image:=range strings.Split(string(output),"\n") {
-		image=strings.TrimSpace(image)
-		if (strings.HasPrefix(image,"node:")||strings.HasPrefix(image,"python:"))&&(strings.HasSuffix(image,"-alpine")||strings.HasSuffix(image,"-slim")) { images=append(images,image) }
+	images := []string{}
+	output, err := exec.Command("docker", "images", "--format", "{{.Repository}}:{{.Tag}}").Output()
+	if err != nil {
+		return images
+	}
+	for _, image := range strings.Split(string(output), "\n") {
+		image = strings.TrimSpace(image)
+		if (strings.HasPrefix(image, "node:") || strings.HasPrefix(image, "python:")) && (strings.HasSuffix(image, "-alpine") || strings.HasSuffix(image, "-slim")) {
+			images = append(images, image)
+		}
 	}
 	return images
 }
 
 func memoryMB() int {
 	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil { return 64 }
+	if err != nil {
+		return 64
+	}
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[0] == "MemTotal:" {
@@ -166,26 +186,40 @@ func memoryMB() int {
 
 func diskMB(path string) int {
 	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil { return 1024 }
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 1024
+	}
 	return max(1024, int((stat.Blocks*uint64(stat.Bsize))/(1024*1024)))
 }
 
 func postJSON(url, token string, input, output any) error {
 	body, err := json.Marshal(input)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
-	if token != "" { req.Header.Set("Authorization", "Bearer "+token) }
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("panel returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
-	if output != nil && len(data) > 0 { return json.Unmarshal(data, output) }
+	if output != nil && len(data) > 0 {
+		return json.Unmarshal(data, output)
+	}
 	return nil
 }
 
@@ -193,16 +227,21 @@ type jobFile struct {
 	Path          string `json:"path"`
 	ContentBase64 string `json:"contentBase64"`
 }
+type jobEnv struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
 
 type runnerJob struct {
 	ID     string `json:"id"`
 	Action string `json:"action"`
 	Bot    struct {
-		ID           string   `json:"id"`
-		Entrypoint   string   `json:"entrypoint"`
-		Image        string   `json:"image"`
-		StartCommand []string `json:"startCommand"`
+		ID           string    `json:"id"`
+		Entrypoint   string    `json:"entrypoint"`
+		Image        string    `json:"image"`
+		StartCommand []string  `json:"startCommand"`
 		Files        []jobFile `json:"files"`
+		Environment  []jobEnv  `json:"environment"`
 		Limits       struct {
 			CPUMillicores int `json:"cpuMillicores"`
 			MemoryMB      int `json:"memoryMb"`
@@ -214,25 +253,31 @@ type runnerJob struct {
 func jobLoop(cfg config) {
 	for {
 		var response struct {
-			Job *runnerJob `json:"job"`
-			PollAfterSeconds int `json:"pollAfterSeconds"`
-			MonitorBotIDs []string `json:"monitorBotIds"`
+			Job              *runnerJob `json:"job"`
+			PollAfterSeconds int        `json:"pollAfterSeconds"`
+			MonitorBotIDs    []string   `json:"monitorBotIds"`
 		}
 		if err := postJSON(cfg.PanelURL+"/api/agents/jobs/next", cfg.AgentToken, map[string]bool{}, &response); err != nil {
 			log.Printf("job poll failed: %v", err)
-			time.Sleep(5*time.Second)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 		if response.Job == nil {
-			for _,botID:=range response.MonitorBotIDs { publishTelemetry(cfg,botID) }
+			for _, botID := range response.MonitorBotIDs {
+				publishTelemetry(cfg, botID)
+			}
 			wait := response.PollAfterSeconds
-			if wait < 1 || wait > 30 { wait = 3 }
-			time.Sleep(time.Duration(wait)*time.Second)
+			if wait < 1 || wait > 30 {
+				wait = 3
+			}
+			time.Sleep(time.Duration(wait) * time.Second)
 			continue
 		}
 		output, containerID, err := executeJob(*response.Job)
-		completion := map[string]any{"success":err==nil,"output":output,"containerId":containerID}
-		if err != nil { completion["error"]=err.Error() }
+		completion := map[string]any{"success": err == nil, "output": output, "containerId": containerID}
+		if err != nil {
+			completion["error"] = err.Error()
+		}
 		if completeErr := postJSON(cfg.PanelURL+"/api/agents/jobs/"+response.Job.ID+"/complete", cfg.AgentToken, completion, nil); completeErr != nil {
 			log.Printf("cannot complete job %s: %v", response.Job.ID, completeErr)
 		}
@@ -240,187 +285,410 @@ func jobLoop(cfg config) {
 }
 
 func publishTelemetry(cfg config, botID string) {
-	if !validID(botID){return}
-	name:=containerName(botID)
-	inspect,err:=exec.Command("docker","inspect","-f","{{.State.Running}}|{{.State.ExitCode}}",name).CombinedOutput()
-	running:=false;exitCode:=0
-	if err==nil {parts:=strings.Split(strings.TrimSpace(string(inspect)),"|");running=len(parts)>0&&parts[0]=="true";if len(parts)>1{exitCode,_=strconv.Atoi(parts[1])}}
-	logs,_:=exec.Command("docker","logs","--tail","250","--timestamps",name).CombinedOutput()
-	cpuPercent:=0.0;memoryUsageMB:=0
-	if running {if stats,statsErr:=exec.Command("docker","stats","--no-stream","--format","{{.CPUPerc}}|{{.MemUsage}}",name).Output();statsErr==nil {parts:=strings.Split(strings.TrimSpace(string(stats)),"|");if len(parts)>0{cpuPercent,_=strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(parts[0]),"%"),64)};if len(parts)>1{memoryUsageMB=parseDockerSize(strings.TrimSpace(strings.Split(parts[1],"/")[0]))}}}
-	payload:=map[string]any{"running":running,"exitCode":exitCode,"logs":string(logs),"cpuUsagePercent":cpuPercent,"memoryUsageMb":memoryUsageMB,"diskUsageMb":workspaceSizeMB(filepath.Join("/srv/beakohost/bots",botID))}
-	if err:=postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry",cfg.AgentToken,payload,nil);err!=nil{log.Printf("telemetry failed for %s: %v",botID,err)}
+	if !validID(botID) {
+		return
+	}
+	name := containerName(botID)
+	inspect, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}|{{.State.ExitCode}}", name).CombinedOutput()
+	running := false
+	exitCode := 0
+	if err == nil {
+		parts := strings.Split(strings.TrimSpace(string(inspect)), "|")
+		running = len(parts) > 0 && parts[0] == "true"
+		if len(parts) > 1 {
+			exitCode, _ = strconv.Atoi(parts[1])
+		}
+	}
+	logs, _ := exec.Command("docker", "logs", "--tail", "250", "--timestamps", name).CombinedOutput()
+	cpuPercent := 0.0
+	memoryUsageMB := 0
+	if running {
+		if stats, statsErr := exec.Command("docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}|{{.MemUsage}}", name).Output(); statsErr == nil {
+			parts := strings.Split(strings.TrimSpace(string(stats)), "|")
+			if len(parts) > 0 {
+				cpuPercent, _ = strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(parts[0]), "%"), 64)
+			}
+			if len(parts) > 1 {
+				memoryUsageMB = parseDockerSize(strings.TrimSpace(strings.Split(parts[1], "/")[0]))
+			}
+		}
+	}
+	payload := map[string]any{"running": running, "exitCode": exitCode, "logs": string(logs), "cpuUsagePercent": cpuPercent, "memoryUsageMb": memoryUsageMB, "diskUsageMb": workspaceSizeMB(filepath.Join("/srv/beakohost/bots", botID))}
+	if err := postJSON(cfg.PanelURL+"/api/agents/bots/"+botID+"/telemetry", cfg.AgentToken, payload, nil); err != nil {
+		log.Printf("telemetry failed for %s: %v", botID, err)
+	}
 }
 
 func parseDockerSize(value string) int {
-	value=strings.TrimSpace(value);units:=[]struct{suffix string;multiplier float64}{{"GiB",1024},{"MiB",1},{"KiB",1.0/1024},{"GB",1000.0*1000*1000/(1024*1024)},{"MB",1000.0*1000/(1024*1024)},{"kB",1000.0/(1024*1024)},{"B",1.0/(1024*1024)}}
-	for _,unit:=range units {if strings.HasSuffix(value,unit.suffix){number,_:=strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value,unit.suffix)),64);return max(0,int(number*unit.multiplier))}}
+	value = strings.TrimSpace(value)
+	units := []struct {
+		suffix     string
+		multiplier float64
+	}{{"GiB", 1024}, {"MiB", 1}, {"KiB", 1.0 / 1024}, {"GB", 1000.0 * 1000 * 1000 / (1024 * 1024)}, {"MB", 1000.0 * 1000 / (1024 * 1024)}, {"kB", 1000.0 / (1024 * 1024)}, {"B", 1.0 / (1024 * 1024)}}
+	for _, unit := range units {
+		if strings.HasSuffix(value, unit.suffix) {
+			number, _ := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value, unit.suffix)), 64)
+			return max(0, int(number*unit.multiplier))
+		}
+	}
 	return 0
 }
 
 func workspaceSizeMB(root string) int {
 	var total int64
-	_ = filepath.Walk(root,func(_ string,info os.FileInfo,err error)error{if err==nil&&!info.IsDir(){total+=info.Size()};return nil})
-	if total==0{return 0};return int((total+1024*1024-1)/(1024*1024))
+	_ = filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	if total == 0 {
+		return 0
+	}
+	return int((total + 1024*1024 - 1) / (1024 * 1024))
 }
 
-func executeJob(job runnerJob) (string,string,error) {
-	if !validID(job.Bot.ID) { return "","",errors.New("invalid bot id") }
-	appDir:=filepath.Join("/srv/beakohost/bots",job.Bot.ID,"app")
+func executeJob(job runnerJob) (string, string, error) {
+	if !validID(job.Bot.ID) {
+		return "", "", errors.New("invalid bot id")
+	}
+	appDir := filepath.Join("/srv/beakohost/bots", job.Bot.ID, "app")
 	switch job.Action {
 	case "SYNC":
-		return syncFiles(appDir,job.Bot.Files)
+		return syncFiles(appDir, job.Bot.Files)
 	case "INSTALL":
-		return runInstall(appDir,job)
+		return runInstall(appDir, job)
 	case "START":
-		return deployBot(appDir,job)
+		return deployBot(appDir, job)
 	case "STOP":
 		return stopContainer(job.Bot.ID)
 	case "RESTART":
-		return deployBot(appDir,job)
+		return deployBot(appDir, job)
 	case "DELETE":
-		return deleteBotWorkspace(appDir,job.Bot.ID)
+		return deleteBotWorkspace(appDir, job.Bot.ID)
 	case "DEPLOY":
-		return deployBot(appDir,job)
+		return deployBot(appDir, job)
 	default:
-		return "","",fmt.Errorf("unsupported action %q",job.Action)
+		return "", "", fmt.Errorf("unsupported action %q", job.Action)
 	}
 }
 
-func stopContainer(botID string) (string,string,error) {
-	output,containerID,err:=dockerCommand("rm","-f",containerName(botID))
-	if err!=nil&&strings.Contains(output,"No such container"){return "O bot já estava parado","",nil}
-	return output,containerID,err
-}
-
-func deployBot(appDir string, job runnerJob) (string,string,error) {
-	_,_,_=dockerCommand("rm","-f",containerName(job.Bot.ID))
-	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
-	if err!=nil{return syncOutput,"",fmt.Errorf("sincronização falhou: %w",err)}
-	output:=syncOutput
-	if err:=validateEntrypoint(appDir,job.Bot.Entrypoint);err!=nil{return output,"",err}
-	hasManifest:=strings.HasPrefix(job.Bot.Image,"node:")&&fileExists(filepath.Join(appDir,"package.json"))||strings.HasPrefix(job.Bot.Image,"python:")&&(fileExists(filepath.Join(appDir,"requirements.txt"))||fileExists(filepath.Join(appDir,"pyproject.toml")))
-	if hasManifest {installOutput,_,installErr:=runInstall(appDir,job);output+="\n"+installOutput;if installErr!=nil{return output,"",fmt.Errorf("instalação automática falhou: %w",installErr)}}
-	startOutput,containerID,startErr:=startContainer(appDir,job);if startOutput!=""{output+="\n"+startOutput}
-	return output,containerID,startErr
-}
-
-func deleteBotWorkspace(appDir, botID string) (string,string,error) {
-	_,_,_=dockerCommand("rm","-f",containerName(botID))
-	botDir:=filepath.Dir(appDir)
-	if !strings.HasPrefix(filepath.Clean(botDir),"/srv/beakohost/bots/"){return "","",errors.New("unsafe workspace deletion")}
-	if err:=os.RemoveAll(botDir);err!=nil{return "","",err}
-	return "Container e arquivos removidos com segurança","",nil
-}
-
-func syncAndStart(appDir string, job runnerJob) (string,string,error) {
-	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
-	if err!=nil{return syncOutput,"",fmt.Errorf("falha ao sincronizar antes de iniciar: %w",err)}
-	entrypoint:=filepath.Join(appDir,filepath.Clean(job.Bot.Entrypoint))
-	if !strings.HasPrefix(filepath.Clean(entrypoint),filepath.Clean(appDir)+string(os.PathSeparator))||!fileExists(entrypoint){
-		return syncOutput,"",fmt.Errorf("arquivo inicial %q não encontrado após sincronizar %d arquivo(s)",job.Bot.Entrypoint,len(job.Bot.Files))
+func stopContainer(botID string) (string, string, error) {
+	cleanupSecretFiles(botID)
+	output, containerID, err := dockerCommand("rm", "-f", containerName(botID))
+	if err != nil && strings.Contains(output, "No such container") {
+		return "O bot já estava parado", "", nil
 	}
-	startOutput,containerID,err:=startContainer(appDir,job)
-	output:=syncOutput
-	if startOutput!=""{output+="\n"+startOutput}
-	return output,containerID,err
+	return output, containerID, err
 }
 
-func syncFiles(appDir string, files []jobFile) (string,string,error) {
-	root:=filepath.Clean(appDir)
-	if !strings.HasPrefix(root,"/srv/beakohost/bots/") { return "","",errors.New("unsafe workspace") }
-	if err:=os.MkdirAll(root,0750);err!=nil{return "","",err}
-	if err:=os.Chmod(root,0777);err!=nil{return "","",err}
-	entries,err:=os.ReadDir(root);if err!=nil{return "","",err}
-	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".beako-python" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
-	for _,file:=range files {
-		clean:=filepath.Clean(file.Path)
-		if clean=="."||filepath.IsAbs(clean)||strings.HasPrefix(clean,".."+string(os.PathSeparator))||clean==".." { return "","",fmt.Errorf("unsafe file path %q",file.Path) }
-		target:=filepath.Join(root,clean)
-		if !strings.HasPrefix(filepath.Clean(target),root+string(os.PathSeparator)){return "","",errors.New("path escaped workspace")}
-		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
-		if err=os.MkdirAll(filepath.Dir(target),0777);err!=nil{return "","",err}
-		if err=os.Chmod(filepath.Dir(target),0777);err!=nil{return "","",err}
-		if err=os.WriteFile(target,data,0666);err!=nil{return "","",err}
-		if err=os.Chmod(target,0666);err!=nil{return "","",err}
+func deployBot(appDir string, job runnerJob) (string, string, error) {
+	_, _, _ = dockerCommand("rm", "-f", containerName(job.Bot.ID))
+	syncOutput, _, err := syncFiles(appDir, job.Bot.Files)
+	if err != nil {
+		return syncOutput, "", fmt.Errorf("sincronização falhou: %w", err)
 	}
-	return fmt.Sprintf("%d arquivo(s) sincronizado(s)",len(files)),"",nil
+	output := syncOutput
+	if err := validateEntrypoint(appDir, job.Bot.Entrypoint); err != nil {
+		return output, "", err
+	}
+	hasManifest := strings.HasPrefix(job.Bot.Image, "node:") && fileExists(filepath.Join(appDir, "package.json")) || strings.HasPrefix(job.Bot.Image, "python:") && (fileExists(filepath.Join(appDir, "requirements.txt")) || fileExists(filepath.Join(appDir, "pyproject.toml")))
+	if hasManifest {
+		installOutput, _, installErr := runInstall(appDir, job)
+		output += "\n" + installOutput
+		if installErr != nil {
+			return output, "", fmt.Errorf("instalação automática falhou: %w", installErr)
+		}
+	}
+	startOutput, containerID, startErr := startContainer(appDir, job)
+	if startOutput != "" {
+		output += "\n" + startOutput
+	}
+	return output, containerID, startErr
 }
 
-func runInstall(appDir string, job runnerJob) (string,string,error) {
-	_,_,_=dockerCommand("rm","-f",containerName(job.Bot.ID))
+func deleteBotWorkspace(appDir, botID string) (string, string, error) {
+	cleanupSecretFiles(botID)
+	_, _, _ = dockerCommand("rm", "-f", containerName(botID))
+	botDir := filepath.Dir(appDir)
+	if !strings.HasPrefix(filepath.Clean(botDir), "/srv/beakohost/bots/") {
+		return "", "", errors.New("unsafe workspace deletion")
+	}
+	if err := os.RemoveAll(botDir); err != nil {
+		return "", "", err
+	}
+	return "Container e arquivos removidos com segurança", "", nil
+}
+
+func syncAndStart(appDir string, job runnerJob) (string, string, error) {
+	syncOutput, _, err := syncFiles(appDir, job.Bot.Files)
+	if err != nil {
+		return syncOutput, "", fmt.Errorf("falha ao sincronizar antes de iniciar: %w", err)
+	}
+	entrypoint := filepath.Join(appDir, filepath.Clean(job.Bot.Entrypoint))
+	if !strings.HasPrefix(filepath.Clean(entrypoint), filepath.Clean(appDir)+string(os.PathSeparator)) || !fileExists(entrypoint) {
+		return syncOutput, "", fmt.Errorf("arquivo inicial %q não encontrado após sincronizar %d arquivo(s)", job.Bot.Entrypoint, len(job.Bot.Files))
+	}
+	startOutput, containerID, err := startContainer(appDir, job)
+	output := syncOutput
+	if startOutput != "" {
+		output += "\n" + startOutput
+	}
+	return output, containerID, err
+}
+
+func syncFiles(appDir string, files []jobFile) (string, string, error) {
+	root := filepath.Clean(appDir)
+	if !strings.HasPrefix(root, "/srv/beakohost/bots/") {
+		return "", "", errors.New("unsafe workspace")
+	}
+	if err := os.MkdirAll(root, 0750); err != nil {
+		return "", "", err
+	}
+	if err := os.Chmod(root, 0777); err != nil {
+		return "", "", err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", "", err
+	}
+	for _, entry := range entries {
+		if entry.Name() != "node_modules" && entry.Name() != ".beako-python" {
+			if err = os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+				return "", "", err
+			}
+		}
+	}
+	for _, file := range files {
+		clean := filepath.Clean(file.Path)
+		if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || clean == ".." {
+			return "", "", fmt.Errorf("unsafe file path %q", file.Path)
+		}
+		target := filepath.Join(root, clean)
+		if !strings.HasPrefix(filepath.Clean(target), root+string(os.PathSeparator)) {
+			return "", "", errors.New("path escaped workspace")
+		}
+		data, err := base64.StdEncoding.DecodeString(file.ContentBase64)
+		if err != nil {
+			return "", "", err
+		}
+		if err = os.MkdirAll(filepath.Dir(target), 0777); err != nil {
+			return "", "", err
+		}
+		if err = os.Chmod(filepath.Dir(target), 0777); err != nil {
+			return "", "", err
+		}
+		if err = os.WriteFile(target, data, 0666); err != nil {
+			return "", "", err
+		}
+		if err = os.Chmod(target, 0666); err != nil {
+			return "", "", err
+		}
+	}
+	return fmt.Sprintf("%d arquivo(s) sincronizado(s)", len(files)), "", nil
+}
+
+func runInstall(appDir string, job runnerJob) (string, string, error) {
+	_, _, _ = dockerCommand("rm", "-f", containerName(job.Bot.ID))
 	var command []string
-	if strings.HasPrefix(job.Bot.Image,"node:") {
-		if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","umask 000 && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"} } else { return "","",errors.New("package.json não encontrado") }
+	if strings.HasPrefix(job.Bot.Image, "node:") {
+		if fileExists(filepath.Join(appDir, "package.json")) {
+			command = []string{"sh", "-lc", "umask 000 && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"}
+		} else {
+			return "", "", errors.New("package.json não encontrado")
+		}
 	} else {
-		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
+		if fileExists(filepath.Join(appDir, "requirements.txt")) {
+			command = []string{"sh", "-lc", "umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python -r requirements.txt"}
+		} else if fileExists(filepath.Join(appDir, "pyproject.toml")) {
+			command = []string{"sh", "-lc", "umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python ."}
+		} else {
+			return "", "", errors.New("requirements.txt ou pyproject.toml não encontrado")
+		}
 	}
-	args:=[]string{"run","--rm","--user","0:0","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
-	args=append(args,command...)
+	args := []string{"run", "--rm", "--user", "0:0", "--network", "bridge", "--security-opt", "no-new-privileges", "--cap-drop", "ALL", "-v", appDir + ":/app", "-w", "/app", job.Bot.Image}
+	args = append(args, command...)
 	return dockerCommand(args...)
 }
 
-func startContainer(appDir string, job runnerJob) (string,string,error) {
-	name:=containerName(job.Bot.ID)
-	_,_,_=dockerCommand("rm","-f",name)
-	cpu:=fmt.Sprintf("%.3f",float64(job.Bot.Limits.CPUMillicores)/1000)
-	memory:=fmt.Sprintf("%dm",job.Bot.Limits.MemoryMB)
-	pids:=strconv.Itoa(job.Bot.Limits.PidsLimit)
-	args:=[]string{"run","-d","--name",name,"--restart","on-failure:5","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app"}
-	if fileExists(filepath.Join(appDir,".env")) { args=append(args,"--env-file",filepath.Join(appDir,".env")) }
-	if strings.HasPrefix(job.Bot.Image,"python:") { args=append(args,"-e","PYTHONPATH=/app/.beako-python") }
-	args=append(args,job.Bot.Image)
-	startCommand:=append([]string(nil),job.Bot.StartCommand...)
-	args=append(args,startCommand...)
-	output,_,err:=dockerCommand(args...)
-	return output,strings.TrimSpace(output),err
+func startContainer(appDir string, job runnerJob) (string, string, error) {
+	name := containerName(job.Bot.ID)
+	_, _, _ = dockerCommand("rm", "-f", name)
+	cpu := fmt.Sprintf("%.3f", float64(job.Bot.Limits.CPUMillicores)/1000)
+	memory := fmt.Sprintf("%dm", job.Bot.Limits.MemoryMB)
+	pids := strconv.Itoa(job.Bot.Limits.PidsLimit)
+	args := []string{"run", "-d", "--name", name, "--restart", "on-failure:5", "--network", "bridge", "--cpus", cpu, "--memory", memory, "--pids-limit", pids, "--security-opt", "no-new-privileges", "--cap-drop", "ALL", "-v", appDir + ":/app", "-w", "/app"}
+	envFile, envErr := writeSecretFile(job.Bot.ID, job.Bot.Environment)
+	if envErr != nil {
+		return "", "", envErr
+	}
+	if envFile != "" {
+		defer os.Remove(envFile)
+		args = append(args, "--env-file", envFile)
+	}
+	if strings.HasPrefix(job.Bot.Image, "python:") {
+		args = append(args, "-e", "PYTHONPATH=/app/.beako-python")
+	}
+	args = append(args, job.Bot.Image)
+	startCommand := append([]string(nil), job.Bot.StartCommand...)
+	args = append(args, startCommand...)
+	output, _, err := dockerCommand(args...)
+	return output, strings.TrimSpace(output), err
 }
 
 func validateEntrypoint(appDir, entrypoint string) error {
-	clean:=filepath.Clean(entrypoint)
-	if clean=="."||filepath.IsAbs(clean)||clean==".."||strings.HasPrefix(clean,".."+string(os.PathSeparator)){
-		return fmt.Errorf("arquivo inicial %q é inválido",entrypoint)
+	clean := filepath.Clean(entrypoint)
+	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("arquivo inicial %q é inválido", entrypoint)
 	}
-	target:=filepath.Join(appDir,clean)
-	if !strings.HasPrefix(filepath.Clean(target),filepath.Clean(appDir)+string(os.PathSeparator)){
-		return fmt.Errorf("arquivo inicial %q está fora da pasta do bot",entrypoint)
+	target := filepath.Join(appDir, clean)
+	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(appDir)+string(os.PathSeparator)) {
+		return fmt.Errorf("arquivo inicial %q está fora da pasta do bot", entrypoint)
 	}
-	if !fileExists(target){
-		return fmt.Errorf("arquivo inicial %q não encontrado; envie o arquivo ou ajuste a inicialização antes de iniciar",entrypoint)
+	if !fileExists(target) {
+		return fmt.Errorf("arquivo inicial %q não encontrado; envie o arquivo ou ajuste a inicialização antes de iniciar", entrypoint)
 	}
 	return nil
 }
 
-func dockerCommand(args ...string)(string,string,error){
-	ctx, cancel:=context.WithTimeout(context.Background(),10*time.Minute);defer cancel()
-	cmd:=exec.CommandContext(ctx,"docker",args...)
-	data,err:=cmd.CombinedOutput();output:=string(data)
-	if ctx.Err()==context.DeadlineExceeded{return output,"",errors.New("comando excedeu 10 minutos")}
-	if err!=nil{return output,"",fmt.Errorf("docker %s: %w: %s",args[0],err,strings.TrimSpace(output))}
-	return output,"",nil
+func dockerCommand(args ...string) (string, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	data, err := cmd.CombinedOutput()
+	output := string(data)
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, "", errors.New("comando excedeu 10 minutos")
+	}
+	if err != nil {
+		return output, "", fmt.Errorf("docker %s: %w: %s", args[0], err, strings.TrimSpace(output))
+	}
+	return output, "", nil
 }
-func containerName(id string)string{return "beako-"+strings.ReplaceAll(id,"-","")}
-func fileExists(path string)bool{info,err:=os.Stat(path);return err==nil&&!info.IsDir()}
-func validID(v string)bool{if len(v)!=36{return false};for _,c:=range v{if !(c=='-'||c>='0'&&c<='9'||c>='a'&&c<='f'){return false}};return true}
+func containerName(id string) string { return "beako-" + strings.ReplaceAll(id, "-", "") }
+func fileExists(path string) bool    { info, err := os.Stat(path); return err == nil && !info.IsDir() }
+func validID(v string) bool {
+	if len(v) != 36 {
+		return false
+	}
+	for _, c := range v {
+		if !(c == '-' || c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+func validEnvKey(value string) bool {
+	if len(value) < 1 || len(value) > 64 {
+		return false
+	}
+	for index, char := range value {
+		if index == 0 {
+			if !(char == '_' || char >= 'A' && char <= 'Z') {
+				return false
+			}
+		} else if !(char == '_' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9') {
+			return false
+		}
+	}
+	return true
+}
+func writeSecretFile(botID string, variables []jobEnv) (string, error) {
+	if len(variables) == 0 {
+		return "", nil
+	}
+	if !validID(botID) {
+		return "", errors.New("invalid bot id for secrets")
+	}
+	directory := secretDirectory
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return "", fmt.Errorf("cannot create secret directory: %w", err)
+	}
+	if err := os.Chmod(directory, 0700); err != nil {
+		return "", err
+	}
+	file, err := os.CreateTemp(directory, botID+"-*.env")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	defer func() {
+		_ = file.Close()
+		if err != nil {
+			_ = os.Remove(path)
+		}
+	}()
+	if err = os.Chmod(path, 0600); err != nil {
+		return "", err
+	}
+	var content strings.Builder
+	seen := map[string]bool{}
+	for _, variable := range variables {
+		if !validEnvKey(variable.Key) || seen[variable.Key] {
+			err = errors.New("invalid environment variable payload")
+			return "", err
+		}
+		if strings.ContainsAny(variable.Value, "\x00\r\n") {
+			err = errors.New("environment variable contains unsupported characters")
+			return "", err
+		}
+		seen[variable.Key] = true
+		content.WriteString(variable.Key)
+		content.WriteByte('=')
+		content.WriteString(variable.Value)
+		content.WriteByte('\n')
+	}
+	if _, err = file.WriteString(content.String()); err != nil {
+		return "", err
+	}
+	if err = file.Sync(); err != nil {
+		return "", err
+	}
+	if err = file.Close(); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+func cleanupSecretFiles(botID string) {
+	if !validID(botID) {
+		return
+	}
+	matches, _ := filepath.Glob(filepath.Join(secretDirectory, botID+"-*.env"))
+	for _, path := range matches {
+		_ = os.Remove(path)
+	}
+}
 
 func validatePanelURL(url string, allowInsecure bool) error {
-	if strings.HasPrefix(url, "https://") { return nil }
-	if allowInsecure && strings.HasPrefix(url, "http://") { return nil }
+	if strings.HasPrefix(url, "https://") {
+		return nil
+	}
+	if allowInsecure && strings.HasPrefix(url, "http://") {
+		return nil
+	}
 	return errors.New("the panel URL must use HTTPS; use --allow-insecure only for temporary HTTP testing")
 }
 
 func readConfig(path string) (config, error) {
 	var cfg config
 	data, err := os.ReadFile(path)
-	if err != nil { return cfg, err }
+	if err != nil {
+		return cfg, err
+	}
 	err = json.Unmarshal(data, &cfg)
 	return cfg, err
 }
 
 func saveConfig(path string, cfg config) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil { return fmt.Errorf("cannot create config directory: %w", err) }
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return fmt.Errorf("cannot create config directory: %w", err)
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil { return err }
-	if err := os.WriteFile(path, data, 0600); err != nil { return fmt.Errorf("cannot save runner credentials: %w", err) }
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("cannot save runner credentials: %w", err)
+	}
 	return nil
 }
