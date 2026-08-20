@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Activity, Bot, Cpu, HardDrive, LogOut, MemoryStick, Plus, Server, ShieldCheck } from 'lucide-react';
+import { Activity, Bot, Cpu, HardDrive, LogOut, MemoryStick, Plus, Server, Settings, ShieldCheck } from 'lucide-react';
 
 type BotItem = { id: string; name: string; status: string; runtime: { language: string; version: string; variant: string }; node: null | { name: string; status: string } };
 
@@ -24,7 +24,7 @@ export default function Dashboard() {
   return <main className="shell">
     <aside>
       <div className="brand"><div className="logo"><Bot size={23}/></div><div><b>BeakoHost</b><small>Bot Cloud</small></div></div>
-      <nav><Link className="active" href="/"><Activity/>Visão geral</Link><Link href="/bots"><Bot/>Meus bots</Link><Link href="/servers"><Server/>Servidores</Link><Link href="/files"><HardDrive/>Arquivos</Link><Link href="/security"><ShieldCheck/>Segurança</Link></nav>
+      <nav><Link className="active" href="/"><Activity/>Visão geral</Link><Link href="/bots"><Bot/>Meus bots</Link><Link href="/files"><HardDrive/>Arquivos</Link><Link href="/security"><ShieldCheck/>Segurança</Link>{user.role==='ADMIN'&&<Link href="/admin"><Settings/>Administração</Link>}</nav>
       <div className="account"><span>{user.displayName.slice(0, 2).toUpperCase()}</span><div><b>{user.displayName}</b><small>{user.role === 'ADMIN' ? 'Administrador' : 'Usuário'}</small></div><button className="logout" onClick={logout} title="Sair"><LogOut/></button></div>
     </aside>
     <section className="content">
@@ -41,7 +41,7 @@ export default function Dashboard() {
         <div className="meter"><label><span>RAM</span><b>0 MB</b></label><i><u style={{width: '0%'}}/></i></div>
         <div className="botFoot"><span><Cpu/> 0% CPU</span><Link className="manage" href={`/bots/${bot.id}`}>Gerenciar</Link></div>
       </article>)}</div>}
-      <div className="node"><div className="nodeHead"><div><Server/><div><h3>Nenhum servidor executor conectado</h3><p>Adicione uma VPS para iniciar os bots.</p></div></div><Link className="manage" href="/servers">Configurar</Link></div></div>
+      {user.role==='ADMIN'&&<div className="node"><div className="nodeHead"><div><Server/><div><h3>Infraestrutura de execução</h3><p>Servidores são controlados somente por administradores.</p></div></div><Link className="manage" href="/admin/servers">Gerenciar</Link></div></div>}
     </section>
   </main>;
 }
