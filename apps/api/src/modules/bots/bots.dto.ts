@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBase64, IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBase64, IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class CreateBotDto {
   @IsString() @MinLength(2) @MaxLength(50) name!: string;
@@ -20,3 +20,7 @@ export class BotActionDto { @IsIn(['SYNC','INSTALL','START','STOP','RESTART']) a
 export class InstallDependenciesDto {
   @IsArray() @ArrayMaxSize(100) @IsString({each:true}) @Matches(/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i,{each:true}) packages!: string[];
 }
+const safePath=/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_./@()+ -]+$/;
+export class CreateEntryDto { @IsString() @MinLength(1) @MaxLength(240) @Matches(safePath) path!:string; @IsIn(['FILE','DIRECTORY']) type!:'FILE'|'DIRECTORY'; }
+export class RenameEntryDto { @IsString() @MinLength(1) @MaxLength(240) @Matches(safePath) from!:string; @IsString() @MinLength(1) @MaxLength(240) @Matches(safePath) to!:string; }
+export class ExtractArchiveDto { @IsString() @MinLength(1) @MaxLength(240) @Matches(safePath) path!:string; @IsOptional() @IsString() @MaxLength(240) @Matches(safePath) destination?:string; @IsOptional() @IsBoolean() deleteArchive?:boolean; }

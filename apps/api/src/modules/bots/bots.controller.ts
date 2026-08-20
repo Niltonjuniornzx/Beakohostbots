@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AuthGuard, SessionUser } from '../auth/auth.guard';
-import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto, InstallDependenciesDto } from './bots.dto';
+import { BotActionDto, BotFileDto, BotFilePathDto, CreateBotDto, CreateEntryDto, ExtractArchiveDto, InstallDependenciesDto, RenameEntryDto } from './bots.dto';
 import { BotsService } from './bots.service';
 
 @UseGuards(AuthGuard)
@@ -14,6 +14,10 @@ export class BotsController {
   @Get(':id/files') files(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.files(request.user.sub, id); }
   @Post(':id/files') upload(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotFileDto) { return this.bots.uploadFile(request.user.sub, id, input); }
   @Post(':id/files/delete') removeFile(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotFilePathDto) { return this.bots.removeFile(request.user.sub, id, input.path); }
+  @Get(':id/files/content') content(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Query('path') path: string) { return this.bots.fileContent(request.user.sub,id,path); }
+  @Post(':id/files/create') createEntry(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: CreateEntryDto) { return this.bots.createEntry(request.user.sub,id,input); }
+  @Post(':id/files/rename') renameEntry(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: RenameEntryDto) { return this.bots.renameEntry(request.user.sub,id,input); }
+  @Post(':id/files/extract') extract(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: ExtractArchiveDto) { return this.bots.extractArchive(request.user.sub,id,input); }
   @Post(':id/actions') action(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotActionDto) { return this.bots.action(request.user.sub,id,input.action); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
   @Get(':id/dependencies') dependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.dependencies(request.user.sub,id); }

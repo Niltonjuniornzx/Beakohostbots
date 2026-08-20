@@ -31,7 +31,7 @@ export class AgentsService {
     const claimed=await this.prisma.agentJob.updateMany({where:{id:queued.id,status:'QUEUED'},data:{status:'RUNNING',startedAt:new Date()}});
     if(!claimed.count)return{job:null,pollAfterSeconds:1};
     const limit=queued.bot.limits[0]||queued.bot.user.limits[0];
-    return{job:{id:queued.id,action:queued.action,bot:{id:queued.bot.id,entrypoint:queued.bot.entrypoint,image:`${queued.bot.runtime.imageRepository}:${queued.bot.runtime.imageTag}`,startCommand:queued.bot.startCommand,files:queued.bot.files.map(file=>({path:file.path,contentBase64:Buffer.from(file.content).toString('base64'),byteSize:file.byteSize})),limits:{cpuMillicores:limit?.cpuMillicores??250,memoryMb:limit?.memoryMb??256,pidsLimit:limit?.pidsLimit??100}}},pollAfterSeconds:0};
+    return{job:{id:queued.id,action:queued.action,bot:{id:queued.bot.id,entrypoint:queued.bot.entrypoint,image:`${queued.bot.runtime.imageRepository}:${queued.bot.runtime.imageTag}`,startCommand:queued.bot.startCommand,files:queued.bot.files.filter(file=>!file.path.endsWith('/.beako-dir')).map(file=>({path:file.path,contentBase64:Buffer.from(file.content).toString('base64'),byteSize:file.byteSize})),limits:{cpuMillicores:limit?.cpuMillicores??250,memoryMb:limit?.memoryMb??256,pidsLimit:limit?.pidsLimit??100}}},pollAfterSeconds:0};
   }
   async completeJob(authorization:string|undefined,id:string,input:CompleteJobDto){
     const node=await this.authenticate(authorization);
