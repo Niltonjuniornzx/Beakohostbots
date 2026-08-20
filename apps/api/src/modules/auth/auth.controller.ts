@@ -19,8 +19,22 @@ export class AuthController {
     const result = await this.auth.login(input); setSessionCookie(reply, result.token); return { user: result.user };
   }
   @Get('discord/status') async discordStatus(){return{enabled:await this.auth.discordEnabled()}}
-  @Get('discord') async discord(@Res() reply:FastifyReply){const result=await this.auth.discordAuthorizationUrl();reply.setCookie('beako_discord_state',result.state,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:600});return reply.redirect(result.url)}
-  @Get('discord/callback') async discordCallback(@Query('code')code:string,@Query('state')state:string,@Req()request:FastifyRequest,@Res()reply:FastifyReply){try{const result=await this.auth.discordCallback(code,state,request.cookies?.beako_discord_state);setSessionCookie(reply,result.token);reply.clearCookie('beako_discord_state',{path:'/'});return reply.redirect(process.env.WEB_URL||'/')}catch(error:any){return reply.redirect(`${process.env.WEB_URL||''}/login?oauth_error=${encodeURIComponent(error?.message||'Falha no login com Discord')}`)}}
+  @Get('discord') async discord(@Res() reply:FastifyReply){
+    const result=await this.auth.discordAuthorizationUrl();
+    reply.setCookie('beako_discord_state',result.state,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:600});
+    return reply.code(302).header('Location',result.url).send();
+  }
+  @Get('discord/callback') async discordCallback(@Query('code')code:string,@Query('state')state:string,@Req()request:FastifyRequest,@Res()reply:FastifyReply){
+    try{
+      const result=await this.auth.discordCallback(code,state,request.cookies?.beako_discord_state);
+      setSessionCookie(reply,result.token);
+      reply.clearCookie('beako_discord_state',{path:'/'});
+      return reply.code(302).header('Location',process.env.WEB_URL||'/').send();
+    }catch(error:any){
+      const location=`${process.env.WEB_URL||''}/login?oauth_error=${encodeURIComponent(error?.message||'Falha no login com Discord')}`;
+      return reply.code(302).header('Location',location).send();
+    }
+  }
   @UseGuards(AuthGuard) @Get('me') me(@Req() request: FastifyRequest & { user: SessionUser }) { return this.auth.me(request.user.sub); }
   @UseGuards(AuthGuard) @Get('me/limits') limits(@Req() request: FastifyRequest & { user: SessionUser }) { return this.auth.limits(request.user.sub); }
   @Post('logout') logout(@Res({ passthrough: true }) reply: FastifyReply) { reply.clearCookie('beako_session', { path: '/' }); return { success: true }; }
