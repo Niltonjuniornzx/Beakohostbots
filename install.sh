@@ -104,6 +104,20 @@ main() {
   info "Construindo e iniciando os serviços..."
   cd "${INSTALL_DIR}"
   docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+  info "Aguardando o painel ficar saudável..."
+  local healthy=false attempt
+  for attempt in $(seq 1 30); do
+    if docker compose --env-file .env -f docker-compose.prod.yml exec -T api \
+      node -e "fetch('http://127.0.0.1:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      healthy=true
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$healthy" != "true" ]]; then
+    docker compose --env-file .env -f docker-compose.prod.yml logs --tail=80 api >&2 || true
+    die "A API não iniciou. Os últimos logs foram exibidos acima."
+  fi
   printf "\n${green}Instalação concluída.${reset}\n"
   printf 'Painel: %s\n' "$(grep '^PUBLIC_URL=' .env | cut -d= -f2-)"
   printf 'Gerenciamento: sudo beakoctl\n\n'

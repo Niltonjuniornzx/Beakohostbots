@@ -21,7 +21,7 @@ export class AgentsService {
   async heartbeat(authorization:string|undefined,input:HeartbeatDto){
     const token=authorization?.startsWith('Bearer ')?authorization.slice(7):'';
     if(!token)throw new UnauthorizedException('Credencial do agente ausente');
-    const node=await this.prisma.executionNode.findUnique({where:{agentTokenHash:digest(token)}});
+    const node=await this.prisma.executionNode.findFirst({where:{agentTokenHash:digest(token)}});
     if(!node)throw new UnauthorizedException('Credencial do agente inválida');
     await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}});
     return{ok:true,nodeId:node.id,nextHeartbeatSeconds:30};

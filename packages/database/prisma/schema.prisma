@@ -117,7 +117,7 @@ model ExecutionNode {
   status NodeStatus @default(PENDING)
   agentVersion String?
   publicKeyFingerprint String? @unique
-  agentTokenHash String? @unique
+  agentTokenHash String?
   totalCpuMillicores Int @default(0)
   totalMemoryMb Int @default(0)
   totalDiskMb BigInt @default(0)
