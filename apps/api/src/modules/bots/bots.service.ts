@@ -47,8 +47,13 @@ export class BotsService {
     const current=await this.prisma.botFile.aggregate({where:{botId:id,path:{not:input.path}},_sum:{byteSize:true}});
     const diskLimit=Number(limit?.diskMb??BigInt(1024))*1024*1024;
     if((current._sum.byteSize??0)+content.length>diskLimit)throw new BadRequestException('O bot atingiu o limite de armazenamento');
-    return this.prisma.botFile.upsert({where:{botId_path:{botId:id,path:input.path}},update:{content,byteSize:content.length},create:{botId:id,path:input.path,content,byteSize:content.length},select:{id:true,path:true,byteSize:true,updatedAt:true}});
+    const file=await this.prisma.botFile.upsert({where:{botId_path:{botId:id,path:input.path}},update:{content,byteSize:content.length},create:{botId:id,path:input.path,content,byteSize:content.length},select:{id:true,path:true,byteSize:true,updatedAt:true}});
+    await this.queueSync(id);
+    return file;
   }
-  async removeFile(userId:string,id:string,path:string){await this.ownedBot(userId,id);await this.prisma.botFile.deleteMany({where:{botId:id,path}});return{success:true}}
+  async removeFile(userId:string,id:string,path:string){await this.ownedBot(userId,id);await this.prisma.botFile.deleteMany({where:{botId:id,path}});await this.queueSync(id);return{success:true}}
+  async action(userId:string,id:string,action:string){const bot=await this.prisma.bot.findFirst({where:{id,userId},select:{id:true,nodeId:true,node:{select:{status:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');if(!bot.nodeId||bot.node?.status!=='ONLINE')throw new BadRequestException('Atribua um Runner online a este bot');const active=await this.prisma.agentJob.findFirst({where:{botId:id,status:{in:['QUEUED','RUNNING']}}});if(active)throw new BadRequestException('Já existe uma tarefa em andamento para este bot');if(action==='INSTALL')await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}});const job=await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action}});if(action==='START')await this.prisma.bot.update({where:{id},data:{status:'STARTING'}});if(action==='STOP')await this.prisma.bot.update({where:{id},data:{status:'STOPPING'}});return job}
+  async jobs(userId:string,id:string){await this.ownedBot(userId,id);return this.prisma.agentJob.findMany({where:{botId:id},select:{id:true,action:true,status:true,output:true,error:true,createdAt:true,startedAt:true,finishedAt:true},orderBy:{createdAt:'desc'},take:20})}
+  private async queueSync(id:string){const bot=await this.prisma.bot.findUnique({where:{id},select:{nodeId:true}});if(!bot?.nodeId)return;const active=await this.prisma.agentJob.count({where:{botId:id,action:'SYNC',status:{in:['QUEUED','RUNNING']}}});if(!active)await this.prisma.agentJob.create({data:{nodeId:bot.nodeId,botId:id,action:'SYNC'}})}
   private async ownedBot(userId:string,id:string){const bot=await this.prisma.bot.findFirst({where:{id,userId},select:{id:true}});if(!bot)throw new NotFoundException('Bot não encontrado');return bot}
 }

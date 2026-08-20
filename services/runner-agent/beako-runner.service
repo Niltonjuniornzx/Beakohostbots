@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 User=beako-agent
 Group=beako-agent
+SupplementaryGroups=docker
 ExecStart=/usr/local/bin/beako-runner --config /etc/beakohost/runner.json
 Restart=always
 RestartSec=3

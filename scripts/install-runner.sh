@@ -51,6 +51,7 @@ fi
 echo "[BeakoHost] Criando usuário e diretórios isolados..."
 getent group beako-agent >/dev/null || groupadd --system beako-agent
 id beako-agent >/dev/null 2>&1 || useradd --system --gid beako-agent --home-dir /srv/beakohost --shell /usr/sbin/nologin beako-agent
+usermod -aG docker beako-agent
 install -d -m 0750 -o beako-agent -g beako-agent /etc/beakohost /srv/beakohost /srv/beakohost/bots
 
 echo "[BeakoHost] Compilando o Runner..."

@@ -127,6 +127,7 @@ model ExecutionNode {
   updatedAt DateTime @updatedAt
   bots Bot[]
   enrollments NodeEnrollment[]
+  jobs AgentJob[]
 }
 
 model NodeEnrollment {
@@ -184,6 +185,7 @@ model Bot {
   logs BotLogChunk[]
   alerts Alert[]
   files BotFile[]
+  jobs AgentJob[]
   @@unique([userId, slug])
   @@index([nodeId, status])
 }
@@ -199,6 +201,24 @@ model BotFile {
   bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
   @@unique([botId, path])
   @@index([botId])
+}
+
+model AgentJob {
+  id String @id @default(uuid()) @db.Uuid
+  nodeId String @db.Uuid
+  botId String @db.Uuid
+  action String
+  status String @default("QUEUED")
+  output String?
+  error String?
+  containerId String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  finishedAt DateTime?
+  node ExecutionNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@index([nodeId, status, createdAt])
+  @@index([botId, createdAt(sort: Desc)])
 }
 
 model ResourceLimit {

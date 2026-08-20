@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -10,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -18,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.2.0"
+const agentVersion = "0.3.0"
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -72,7 +75,8 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("runner %s connected to node %s", agentVersion, cfg.NodeID)
-	heartbeatLoop(cfg)
+	go heartbeatLoop(cfg)
+	jobLoop(cfg)
 }
 
 func enrollAgent(panelURL, token, configPath string, allowInsecure bool) error {
@@ -159,6 +163,127 @@ func postJSON(url, token string, input, output any) error {
 	if output != nil && len(data) > 0 { return json.Unmarshal(data, output) }
 	return nil
 }
+
+type jobFile struct {
+	Path          string `json:"path"`
+	ContentBase64 string `json:"contentBase64"`
+}
+
+type runnerJob struct {
+	ID     string `json:"id"`
+	Action string `json:"action"`
+	Bot    struct {
+		ID           string   `json:"id"`
+		Entrypoint   string   `json:"entrypoint"`
+		Image        string   `json:"image"`
+		StartCommand []string `json:"startCommand"`
+		Files        []jobFile `json:"files"`
+		Limits       struct {
+			CPUMillicores int `json:"cpuMillicores"`
+			MemoryMB      int `json:"memoryMb"`
+			PidsLimit     int `json:"pidsLimit"`
+		} `json:"limits"`
+	} `json:"bot"`
+}
+
+func jobLoop(cfg config) {
+	for {
+		var response struct {
+			Job *runnerJob `json:"job"`
+			PollAfterSeconds int `json:"pollAfterSeconds"`
+		}
+		if err := postJSON(cfg.PanelURL+"/api/agents/jobs/next", cfg.AgentToken, map[string]bool{}, &response); err != nil {
+			log.Printf("job poll failed: %v", err)
+			time.Sleep(5*time.Second)
+			continue
+		}
+		if response.Job == nil {
+			wait := response.PollAfterSeconds
+			if wait < 1 || wait > 30 { wait = 3 }
+			time.Sleep(time.Duration(wait)*time.Second)
+			continue
+		}
+		output, containerID, err := executeJob(*response.Job)
+		completion := map[string]any{"success":err==nil,"output":output,"containerId":containerID}
+		if err != nil { completion["error"]=err.Error() }
+		if completeErr := postJSON(cfg.PanelURL+"/api/agents/jobs/"+response.Job.ID+"/complete", cfg.AgentToken, completion, nil); completeErr != nil {
+			log.Printf("cannot complete job %s: %v", response.Job.ID, completeErr)
+		}
+	}
+}
+
+func executeJob(job runnerJob) (string,string,error) {
+	if !validID(job.Bot.ID) { return "","",errors.New("invalid bot id") }
+	appDir:=filepath.Join("/srv/beakohost/bots",job.Bot.ID,"app")
+	switch job.Action {
+	case "SYNC":
+		return syncFiles(appDir,job.Bot.Files)
+	case "INSTALL":
+		return runInstall(appDir,job)
+	case "START":
+		return startContainer(appDir,job)
+	case "STOP":
+		return dockerCommand("rm","-f",containerName(job.Bot.ID))
+	case "RESTART":
+		return dockerCommand("restart",containerName(job.Bot.ID))
+	default:
+		return "","",fmt.Errorf("unsupported action %q",job.Action)
+	}
+}
+
+func syncFiles(appDir string, files []jobFile) (string,string,error) {
+	root:=filepath.Clean(appDir)
+	if !strings.HasPrefix(root,"/srv/beakohost/bots/") { return "","",errors.New("unsafe workspace") }
+	if err:=os.MkdirAll(root,0750);err!=nil{return "","",err}
+	entries,err:=os.ReadDir(root);if err!=nil{return "","",err}
+	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".venv" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
+	for _,file:=range files {
+		clean:=filepath.Clean(file.Path)
+		if clean=="."||filepath.IsAbs(clean)||strings.HasPrefix(clean,".."+string(os.PathSeparator))||clean==".." { return "","",fmt.Errorf("unsafe file path %q",file.Path) }
+		target:=filepath.Join(root,clean)
+		if !strings.HasPrefix(filepath.Clean(target),root+string(os.PathSeparator)){return "","",errors.New("path escaped workspace")}
+		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
+		if err=os.MkdirAll(filepath.Dir(target),0750);err!=nil{return "","",err}
+		if err=os.WriteFile(target,data,0640);err!=nil{return "","",err}
+	}
+	return fmt.Sprintf("%d arquivo(s) sincronizado(s)",len(files)),"",nil
+}
+
+func runInstall(appDir string, job runnerJob) (string,string,error) {
+	var command []string
+	if strings.HasPrefix(job.Bot.Image,"node:") {
+		if fileExists(filepath.Join(appDir,"package-lock.json")) { command=[]string{"npm","ci","--omit=dev"} } else if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"npm","install","--omit=dev"} } else { return "","",errors.New("package.json não encontrado") }
+	} else {
+		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"pip","install","--no-cache-dir","-r","requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"pip","install","--no-cache-dir","."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
+	}
+	args:=[]string{"run","--rm","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
+	args=append(args,command...)
+	return dockerCommand(args...)
+}
+
+func startContainer(appDir string, job runnerJob) (string,string,error) {
+	name:=containerName(job.Bot.ID)
+	_,_,_=dockerCommand("rm","-f",name)
+	cpu:=fmt.Sprintf("%.3f",float64(job.Bot.Limits.CPUMillicores)/1000)
+	memory:=fmt.Sprintf("%dm",job.Bot.Limits.MemoryMB)
+	pids:=strconv.Itoa(job.Bot.Limits.PidsLimit)
+	args:=[]string{"run","-d","--name",name,"--restart","unless-stopped","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
+	args=append(args,job.Bot.StartCommand...)
+	output,_,err:=dockerCommand(args...)
+	return output,strings.TrimSpace(output),err
+}
+
+func dockerCommand(args ...string)(string,string,error){
+	ctx, cancel:=context.WithTimeout(context.Background(),10*time.Minute);defer cancel()
+	cmd:=exec.CommandContext(ctx,"docker",args...)
+	data,err:=cmd.CombinedOutput();output:=string(data)
+	if ctx.Err()==context.DeadlineExceeded{return output,"",errors.New("comando excedeu 10 minutos")}
+	if err!=nil{return output,"",fmt.Errorf("docker %s: %w: %s",args[0],err,strings.TrimSpace(output))}
+	return output,"",nil
+}
+func containerName(id string)string{return "beako-"+strings.ReplaceAll(id,"-","")}
+func fileExists(path string)bool{info,err:=os.Stat(path);return err==nil&&!info.IsDir()}
+func validID(v string)bool{if len(v)!=36{return false};for _,c:=range v{if !(c=='-'||c>='0'&&c<='9'||c>='a'&&c<='f'){return false}};return true}
 
 func validatePanelURL(url string, allowInsecure bool) error {
 	if strings.HasPrefix(url, "https://") { return nil }

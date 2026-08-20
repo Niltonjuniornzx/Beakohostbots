@@ -16,3 +16,4 @@ export class BotFileDto {
 export class BotFilePathDto {
   @IsString() @MinLength(1) @MaxLength(240) @Matches(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_./@()+ -]+$/) path!: string;
 }
+export class BotActionDto { @IsIn(['SYNC','INSTALL','START','STOP','RESTART']) action!: 'SYNC'|'INSTALL'|'START'|'STOP'|'RESTART'; }
