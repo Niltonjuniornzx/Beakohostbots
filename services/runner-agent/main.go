@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.6.0"
+const agentVersion = "0.7.0"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -39,6 +39,8 @@ type metrics struct {
 	TotalMemoryMB      int    `json:"totalMemoryMb"`
 	TotalDiskMB        int    `json:"totalDiskMb"`
 	RuntimeImages      []string `json:"runtimeImages"`
+	SetupStatus        string   `json:"setupStatus"`
+	SetupLog           string   `json:"setupLog,omitempty"`
 }
 
 type enrollmentRequest struct {
@@ -126,7 +128,16 @@ func heartbeatLoop(cfg config) {
 func collectMetrics() metrics {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" { hostname = "runner-desconhecido" }
-	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages()}
+	status:="INSTALLING"
+	if fileExists("/srv/beakohost/.setup-error"){status="ERROR"} else if fileExists("/srv/beakohost/.setup-ready"){status="READY"}
+	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost"), RuntimeImages: availableRuntimeImages(), SetupStatus:status, SetupLog:setupLog()}
+}
+
+func setupLog() string {
+	data,err:=os.ReadFile("/var/log/beakohost/setup.log")
+	if err!=nil{return ""}
+	if len(data)>50000{data=data[len(data)-50000:]}
+	return string(data)
 }
 
 func availableRuntimeImages() []string {

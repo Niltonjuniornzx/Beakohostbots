@@ -71,7 +71,7 @@ export default function ServersAdmin() {
       {nodes.length === 0 ? <div className="emptyState"><Server /><h3>Nenhum servidor cadastrado</h3><p>Adicione a primeira VPS executora.</p></div> : nodes.map(node =>
         <div className="listRow" key={node.id}>
           <div className="botIcon"><Server /></div>
-          <div><b>{node.name}</b><small>{node.hostname} · {node.totalCpuMillicores / 1000} vCPU · {node.totalMemoryMb} MB · {node._count.bots} bots · agente {node.agentVersion || 'não conectado'}</small><div className="nodeRuntimes">{(Array.isArray(node.runtimeImages)?node.runtimeImages:[]).map((image:string)=><em key={image}>{image}</em>)}</div></div>
+          <div><b>{node.name}</b><small>{node.hostname} · {node.totalCpuMillicores / 1000} vCPU · {node.totalMemoryMb} MB · {node._count.bots} bots · agente {node.agentVersion || 'não conectado'}</small><div className="nodeRuntimes">{(Array.isArray(node.runtimeImages)?node.runtimeImages:[]).map((image:string)=><em key={image}>{image}</em>)}</div><details className="setupLog"><summary>Preparação: <strong className={(node.setupStatus||'PENDING').toLowerCase()}>{node.setupStatus||'PENDING'}</strong> · ver log</summary><pre>{node.setupLog||'Aguardando o primeiro relatório do instalador...'}</pre></details></div>
           <span className={node.status === 'ONLINE' ? 'online' : 'offline'}>{node.status}</span>
           <button className="dangerIcon" onClick={() => remove(node.id)}><Trash2 /></button>
         </div>)}

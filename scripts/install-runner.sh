@@ -20,6 +20,19 @@ if [[ ${EUID} -ne 0 ]]; then
   echo "Execute como root: sudo bash scripts/install-runner.sh ..." >&2
   exit 1
 fi
+install -d -m 0755 /var/log/beakohost
+exec > >(tee -a /var/log/beakohost/setup.log) 2>&1
+setup_success="false"
+on_exit() {
+  status=$?
+  if [[ -n "${build_dir:-}" && -d "$build_dir" ]]; then rm -rf -- "$build_dir"; fi
+  if [[ "$setup_success" != "true" ]]; then
+    install -d -m 0750 /srv/beakohost 2>/dev/null || true
+    touch /srv/beakohost/.setup-error 2>/dev/null || true
+    echo "[BeakoHost] SETUP_ERROR (código $status)"
+  fi
+}
+trap on_exit EXIT
 if [[ "$update_only" == "true" && ! -f /etc/beakohost/runner.json ]]; then
   echo "Runner ainda não cadastrado. Use --panel e --token na primeira instalação." >&2
   exit 2
@@ -53,6 +66,7 @@ getent group beako-agent >/dev/null || groupadd --system beako-agent
 id beako-agent >/dev/null 2>&1 || useradd --system --gid beako-agent --home-dir /srv/beakohost --shell /usr/sbin/nologin beako-agent
 usermod -aG docker beako-agent
 install -d -m 0750 -o beako-agent -g beako-agent /etc/beakohost /srv/beakohost /srv/beakohost/bots
+rm -f /srv/beakohost/.setup-ready /srv/beakohost/.setup-error
 
 echo "[BeakoHost] Preparando runtimes oficiais..."
 runtime_images=(node:24-alpine node:22-alpine python:3.13-alpine python:3.12-alpine)
@@ -71,7 +85,6 @@ done
 
 echo "[BeakoHost] Compilando o Runner..."
 build_dir="$(mktemp -d)"
-trap 'rm -rf -- "$build_dir"' EXIT
 docker run --rm \
   -v "$(pwd)/services/runner-agent:/src:ro" \
   -v "$build_dir:/out" \
@@ -94,7 +107,10 @@ install -m 0644 services/runner-agent/beako-runner.service /etc/systemd/system/b
 install -m 0755 scripts/beako-runtime /usr/local/bin/beako-runtime
 systemctl daemon-reload
 systemctl enable beako-runner
+touch /srv/beakohost/.setup-ready
+chown beako-agent:beako-agent /srv/beakohost/.setup-ready
 systemctl restart beako-runner
+setup_success="true"
 
 echo
 echo "Runner conectado com sucesso."
