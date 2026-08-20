@@ -38,3 +38,4 @@
 .mobileBrand{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;margin-bottom:42px;color:#eee}
 .mobileBrand svg{color:#8e78ff}
 }
+.oauthDivider{display:flex;align-items:center;gap:12px;margin:18px 0;color:#8d8da8;font-size:12px}.oauthDivider:before,.oauthDivider:after{content:"";height:1px;background:#2c2c40;flex:1}.discordLogin{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:#5865f2!important;color:#fff!important}.discordLogin svg{width:19px}.oauth{margin-top:18px}

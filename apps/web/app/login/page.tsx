@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Eye, EyeOff, LockKeyhole, Mail, User } from 'lucide-react';
+import { Bot, Eye, EyeOff, LockKeyhole, Mail, MessageCircle, User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,10 +12,11 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [discordEnabled,setDiscordEnabled]=useState(false);
   useEffect(() => {
-    Promise.all([fetch('/api/auth/me', { credentials: 'include' }), fetch('/api/auth/setup-status')]).then(async ([me, status]) => {
+    Promise.all([fetch('/api/auth/me', { credentials: 'include' }), fetch('/api/auth/setup-status'),fetch('/api/auth/discord/status')]).then(async ([me, status,discord]) => {
       if (me.ok) return router.replace('/');
-      const setup = await status.json(); setNeedsAdmin(Boolean(setup.needsAdmin)); setRegister(Boolean(setup.needsAdmin)); setLoading(false);
+      const setup = await status.json(); setNeedsAdmin(Boolean(setup.needsAdmin)); setRegister(Boolean(setup.needsAdmin));setDiscordEnabled(discord.ok&&Boolean((await discord.json()).enabled));setError(new URLSearchParams(window.location.search).get('oauth_error')||''); setLoading(false);
     }).catch(() => { setError('Não foi possível conectar à API.'); setLoading(false); });
   }, [router]);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -40,6 +41,7 @@ export default function LoginPage() {
           {error && <div className="authError">{error}</div>}
           <button disabled={sending}>{sending ? 'Aguarde...' : needsAdmin ? 'Criar administrador' : register ? 'Criar conta' : 'Entrar'}</button>
         </form>
+        {!needsAdmin&&discordEnabled&&<><div className="oauthDivider"><span>ou</span></div><button className="discordLogin" onClick={()=>{window.location.href='/api/auth/discord'}}><MessageCircle/>Continuar com Discord</button></>}
         {!needsAdmin && <button className="switchAuth" onClick={() => { setRegister(!register); setError(''); }}>{register ? 'Já possui conta? Entrar' : 'Não possui conta? Cadastre-se'}</button>}
         <div className="oauth"><span>BeakoHost Beta · recursos novos em desenvolvimento</span></div>
       </>}
