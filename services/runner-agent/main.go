@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.8.3"
+const agentVersion = "0.8.4"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -261,7 +261,7 @@ func executeJob(job runnerJob) (string,string,error) {
 	case "START":
 		return deployBot(appDir,job)
 	case "STOP":
-		return dockerCommand("rm","-f",containerName(job.Bot.ID))
+		return stopContainer(job.Bot.ID)
 	case "RESTART":
 		return deployBot(appDir,job)
 	case "DELETE":
@@ -271,6 +271,12 @@ func executeJob(job runnerJob) (string,string,error) {
 	default:
 		return "","",fmt.Errorf("unsupported action %q",job.Action)
 	}
+}
+
+func stopContainer(botID string) (string,string,error) {
+	output,containerID,err:=dockerCommand("rm","-f",containerName(botID))
+	if err!=nil&&strings.Contains(output,"No such container"){return "O bot já estava parado","",nil}
+	return output,containerID,err
 }
 
 func deployBot(appDir string, job runnerJob) (string,string,error) {
@@ -309,7 +315,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 	root:=filepath.Clean(appDir)
 	if !strings.HasPrefix(root,"/srv/beakohost/bots/") { return "","",errors.New("unsafe workspace") }
 	if err:=os.MkdirAll(root,0750);err!=nil{return "","",err}
-	if err:=os.Chmod(root,0755);err!=nil{return "","",err}
+	if err:=os.Chmod(root,0777);err!=nil{return "","",err}
 	entries,err:=os.ReadDir(root);if err!=nil{return "","",err}
 	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".venv" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
 	for _,file:=range files {
@@ -318,10 +324,10 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 		target:=filepath.Join(root,clean)
 		if !strings.HasPrefix(filepath.Clean(target),root+string(os.PathSeparator)){return "","",errors.New("path escaped workspace")}
 		data,err:=base64.StdEncoding.DecodeString(file.ContentBase64);if err!=nil{return "","",err}
-		if err=os.MkdirAll(filepath.Dir(target),0755);err!=nil{return "","",err}
-		if err=os.Chmod(filepath.Dir(target),0755);err!=nil{return "","",err}
-		if err=os.WriteFile(target,data,0644);err!=nil{return "","",err}
-		if err=os.Chmod(target,0644);err!=nil{return "","",err}
+		if err=os.MkdirAll(filepath.Dir(target),0777);err!=nil{return "","",err}
+		if err=os.Chmod(filepath.Dir(target),0777);err!=nil{return "","",err}
+		if err=os.WriteFile(target,data,0666);err!=nil{return "","",err}
+		if err=os.Chmod(target,0666);err!=nil{return "","",err}
 	}
 	return fmt.Sprintf("%d arquivo(s) sincronizado(s)",len(files)),"",nil
 }
@@ -329,9 +335,9 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 func runInstall(appDir string, job runnerJob) (string,string,error) {
 	var command []string
 	if strings.HasPrefix(job.Bot.Image,"node:") {
-		if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"} } else { return "","",errors.New("package.json não encontrado") }
+		if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","umask 000 && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"} } else { return "","",errors.New("package.json não encontrado") }
 	} else {
-		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
+		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","umask 000 && python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","umask 000 && python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
 	args:=[]string{"run","--rm","--user","0:0","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
 	args=append(args,command...)
