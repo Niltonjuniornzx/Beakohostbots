@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.4.1"
+const agentVersion = "0.4.2"
 
 type config struct {
 	PanelURL      string `json:"panelUrl"`
@@ -234,14 +234,27 @@ func executeJob(job runnerJob) (string,string,error) {
 	case "INSTALL":
 		return runInstall(appDir,job)
 	case "START":
-		return startContainer(appDir,job)
+		return syncAndStart(appDir,job)
 	case "STOP":
 		return dockerCommand("rm","-f",containerName(job.Bot.ID))
 	case "RESTART":
-		return dockerCommand("restart",containerName(job.Bot.ID))
+		return syncAndStart(appDir,job)
 	default:
 		return "","",fmt.Errorf("unsupported action %q",job.Action)
 	}
+}
+
+func syncAndStart(appDir string, job runnerJob) (string,string,error) {
+	syncOutput,_,err:=syncFiles(appDir,job.Bot.Files)
+	if err!=nil{return syncOutput,"",fmt.Errorf("falha ao sincronizar antes de iniciar: %w",err)}
+	entrypoint:=filepath.Join(appDir,filepath.Clean(job.Bot.Entrypoint))
+	if !strings.HasPrefix(filepath.Clean(entrypoint),filepath.Clean(appDir)+string(os.PathSeparator))||!fileExists(entrypoint){
+		return syncOutput,"",fmt.Errorf("arquivo inicial %q não encontrado após sincronizar %d arquivo(s)",job.Bot.Entrypoint,len(job.Bot.Files))
+	}
+	startOutput,containerID,err:=startContainer(appDir,job)
+	output:=syncOutput
+	if startOutput!=""{output+="\n"+startOutput}
+	return output,containerID,err
 }
 
 func syncFiles(appDir string, files []jobFile) (string,string,error) {
