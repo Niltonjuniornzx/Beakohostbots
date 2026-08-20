@@ -1,17 +1,82 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum UserRole { USER ADMIN }
-enum UserStatus { ACTIVE SUSPENDED BANNED }
-enum OAuthProvider { GOOGLE DISCORD }
-enum BotStatus { STOPPED STARTING RUNNING STOPPING CRASHED SUSPENDED ISOLATED }
-enum RuntimeLanguage { NODEJS PYTHON }
-enum RuntimeVariant { ALPINE SLIM }
-enum NodeStatus { PENDING ONLINE DRAINING OFFLINE COMPROMISED }
-enum LimitScope { GLOBAL PLAN USER BOT }
-enum AlertSeverity { INFO WARNING CRITICAL }
-enum AlertStatus { OPEN ACKNOWLEDGED RESOLVED }
-enum AutomaticAction { NONE THROTTLE STOP ISOLATE SUSPEND }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum OAuthProvider {
+  GOOGLE
+  DISCORD
+}
+
+enum BotStatus {
+  STOPPED
+  STARTING
+  RUNNING
+  STOPPING
+  CRASHED
+  SUSPENDED
+  ISOLATED
+}
+
+enum RuntimeLanguage {
+  NODEJS
+  PYTHON
+}
+
+enum RuntimeVariant {
+  ALPINE
+  SLIM
+}
+
+enum NodeStatus {
+  PENDING
+  ONLINE
+  DRAINING
+  OFFLINE
+  COMPROMISED
+}
+
+enum LimitScope {
+  GLOBAL
+  PLAN
+  USER
+  BOT
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum AutomaticAction {
+  NONE
+  THROTTLE
+  STOP
+  ISOLATE
+  SUSPEND
+}
 
 model User {
   id String @id @default(uuid()) @db.Uuid
