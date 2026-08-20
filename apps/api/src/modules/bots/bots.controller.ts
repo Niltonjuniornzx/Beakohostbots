@@ -15,6 +15,7 @@ export class BotsController {
   @Post(':id/files') upload(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotFileDto) { return this.bots.uploadFile(request.user.sub, id, input); }
   @Post(':id/files/delete') removeFile(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotFilePathDto) { return this.bots.removeFile(request.user.sub, id, input.path); }
   @Get(':id/files/content') content(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Query('path') path: string) { return this.bots.fileContent(request.user.sub,id,path); }
+  @Get(':id/files/download') download(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Query('path') path: string) { return this.bots.downloadFile(request.user.sub,id,path); }
   @Post(':id/files/create') createEntry(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: CreateEntryDto) { return this.bots.createEntry(request.user.sub,id,input); }
   @Post(':id/files/rename') renameEntry(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: RenameEntryDto) { return this.bots.renameEntry(request.user.sub,id,input); }
   @Post(':id/files/extract') extract(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: ExtractArchiveDto) { return this.bots.extractArchive(request.user.sub,id,input); }
