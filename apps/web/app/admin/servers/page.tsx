@@ -13,17 +13,14 @@ export default function ServersAdmin() {
   useEffect(() => {
     setOrigin(window.location.origin);
     void load();
+    const timer=setInterval(()=>void load(),30000);
+    return()=>clearInterval(timer);
   }, []);
 
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget));
-    const body = {
-      ...data,
-      totalCpuMillicores: Number(data.totalCpuMillicores),
-      totalMemoryMb: Number(data.totalMemoryMb),
-      totalDiskMb: Number(data.totalDiskMb),
-    };
+    const body = data;
     const response = await fetch('/api/admin/nodes', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -56,10 +53,7 @@ export default function ServersAdmin() {
     </header>
     {show && <form className="settingsForm" onSubmit={create}>
       <label>Nome<input name="name" required placeholder="node-br-01" /></label>
-      <label>IP ou hostname<input name="hostname" required placeholder="10.0.0.20" /></label>
-      <label>CPU disponível (millicores)<input name="totalCpuMillicores" type="number" defaultValue="2000" required /></label>
-      <label>RAM disponível (MB)<input name="totalMemoryMb" type="number" defaultValue="8192" required /></label>
-      <label>Disco disponível (MB)<input name="totalDiskMb" type="number" defaultValue="81920" required /></label>
+      <p>CPU, RAM, disco e hostname serão detectados automaticamente pelo Runner.</p>
       <button>Criar e gerar token</button>
     </form>}
     {token && <div className="tokenBox">

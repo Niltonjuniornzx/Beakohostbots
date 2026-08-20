@@ -14,7 +14,7 @@ export class AgentsService {
     const agentToken=randomBytes(32).toString('base64url');
     await this.prisma.$transaction([
       this.prisma.nodeEnrollment.update({where:{id:enrollment.id},data:{consumedAt:new Date()}}),
-      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}}),
+      this.prisma.executionNode.update({where:{id:enrollment.nodeId},data:{status:'ONLINE',hostname:input.hostname||enrollment.node.hostname,agentTokenHash:digest(agentToken),agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}}),
     ]);
     return{nodeId:enrollment.nodeId,nodeName:enrollment.node.name,agentToken,heartbeatIntervalSeconds:30};
   }
@@ -23,7 +23,7 @@ export class AgentsService {
     if(!token)throw new UnauthorizedException('Credencial do agente ausente');
     const node=await this.prisma.executionNode.findFirst({where:{agentTokenHash:digest(token)}});
     if(!node)throw new UnauthorizedException('Credencial do agente inválida');
-    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}});
+    await this.prisma.executionNode.update({where:{id:node.id},data:{status:'ONLINE',hostname:input.hostname||node.hostname,agentVersion:input.agentVersion,totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),lastHeartbeatAt:new Date()}});
     return{ok:true,nodeId:node.id,nextHeartbeatSeconds:30};
   }
 }

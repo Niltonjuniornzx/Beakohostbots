@@ -29,6 +29,7 @@ type config struct {
 
 type metrics struct {
 	AgentVersion       string `json:"agentVersion"`
+	Hostname           string `json:"hostname"`
 	TotalCPUMillicores int    `json:"totalCpuMillicores"`
 	TotalMemoryMB      int    `json:"totalMemoryMb"`
 	TotalDiskMB        int    `json:"totalDiskMb"`
@@ -116,7 +117,9 @@ func heartbeatLoop(cfg config) {
 }
 
 func collectMetrics() metrics {
-	return metrics{AgentVersion: agentVersion, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost")}
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" { hostname = "runner-desconhecido" }
+	return metrics{AgentVersion: agentVersion, Hostname: hostname, TotalCPUMillicores: runtime.NumCPU() * 1000, TotalMemoryMB: memoryMB(), TotalDiskMB: diskMB("/srv/beakohost")}
 }
 
 func memoryMB() int {

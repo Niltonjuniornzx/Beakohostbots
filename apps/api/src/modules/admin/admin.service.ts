@@ -20,7 +20,7 @@ export class AdminService {
   async nodes(){const nodes=await this.prisma.executionNode.findMany({include:{_count:{select:{bots:true}}},orderBy:{createdAt:'desc'}});return nodes.map(({agentTokenHash,...node})=>({...node,status:node.lastHeartbeatAt&&Date.now()-node.lastHeartbeatAt.getTime()>90000?'OFFLINE':node.status,totalDiskMb:node.totalDiskMb.toString()}))}
   async createNode(input:CreateNodeDto){
     const token=randomBytes(32).toString('base64url'); const tokenHash=createHash('sha256').update(token).digest('hex');
-    const node=await this.prisma.executionNode.create({data:{name:input.name.trim(),hostname:input.hostname.trim(),totalCpuMillicores:input.totalCpuMillicores,totalMemoryMb:input.totalMemoryMb,totalDiskMb:BigInt(input.totalDiskMb),enrollments:{create:{tokenHash,expiresAt:new Date(Date.now()+15*60*1000)}}}});
+    const node=await this.prisma.executionNode.create({data:{name:input.name.trim(),hostname:'Aguardando conexão',enrollments:{create:{tokenHash,expiresAt:new Date(Date.now()+15*60*1000)}}}});
     const {agentTokenHash,...safeNode}=node;
     return {...safeNode,totalDiskMb:node.totalDiskMb.toString(),enrollmentToken:token,expiresInSeconds:900};
   }

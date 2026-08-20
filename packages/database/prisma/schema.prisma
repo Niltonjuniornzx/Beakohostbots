@@ -183,8 +183,22 @@ model Bot {
   sftpCredentials SftpCredential[]
   logs BotLogChunk[]
   alerts Alert[]
+  files BotFile[]
   @@unique([userId, slug])
   @@index([nodeId, status])
+}
+
+model BotFile {
+  id String @id @default(uuid()) @db.Uuid
+  botId String @db.Uuid
+  path String
+  content Bytes
+  byteSize Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@unique([botId, path])
+  @@index([botId])
 }
 
 model ResourceLimit {
