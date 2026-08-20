@@ -1,0 +1,224 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+enum UserRole { USER ADMIN }
+enum UserStatus { ACTIVE SUSPENDED BANNED }
+enum OAuthProvider { GOOGLE DISCORD }
+enum BotStatus { STOPPED STARTING RUNNING STOPPING CRASHED SUSPENDED ISOLATED }
+enum RuntimeLanguage { NODEJS PYTHON }
+enum RuntimeVariant { ALPINE SLIM }
+enum NodeStatus { PENDING ONLINE DRAINING OFFLINE COMPROMISED }
+enum LimitScope { GLOBAL PLAN USER BOT }
+enum AlertSeverity { INFO WARNING CRITICAL }
+enum AlertStatus { OPEN ACKNOWLEDGED RESOLVED }
+enum AutomaticAction { NONE THROTTLE STOP ISOLATE SUSPEND }
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  passwordHash String?
+  displayName String
+  avatarUrl String?
+  role UserRole @default(USER)
+  status UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  lastLoginAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  accounts OAuthAccount[]
+  bots Bot[]
+  limits ResourceLimit[]
+  alerts Alert[]
+  auditEvents AuditLog[] @relation("AuditActor")
+}
+
+model OAuthAccount {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  provider OAuthProvider
+  providerAccountId String
+  accessTokenEncrypted Bytes?
+  refreshTokenEncrypted Bytes?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model ExecutionNode {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  hostname String
+  status NodeStatus @default(PENDING)
+  agentVersion String?
+  publicKeyFingerprint String? @unique
+  totalCpuMillicores Int @default(0)
+  totalMemoryMb Int @default(0)
+  totalDiskMb BigInt @default(0)
+  labels Json @default("{}")
+  lastHeartbeatAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bots Bot[]
+  enrollments NodeEnrollment[]
+}
+
+model NodeEnrollment {
+  id String @id @default(uuid()) @db.Uuid
+  nodeId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  node ExecutionNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+}
+
+model Runtime {
+  id String @id @default(uuid()) @db.Uuid
+  language RuntimeLanguage
+  version String
+  variant RuntimeVariant
+  imageRepository String
+  imageTag String
+  imageDigest String
+  installCommand Json
+  defaultStartCommand Json
+  enabled Boolean @default(true)
+  minimumMemoryMb Int @default(128)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bots Bot[]
+  @@unique([language, version, variant])
+}
+
+model Bot {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  runtimeId String @db.Uuid
+  nodeId String? @db.Uuid
+  name String
+  slug String
+  status BotStatus @default(STOPPED)
+  entrypoint String
+  startCommand Json
+  autoRestart Boolean @default(true)
+  maxRestartCount Int @default(5)
+  containerId String?
+  lastExitCode Int?
+  lastStartedAt DateTime?
+  lastStoppedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runtime Runtime @relation(fields: [runtimeId], references: [id])
+  node ExecutionNode? @relation(fields: [nodeId], references: [id])
+  limits ResourceLimit[]
+  envVariables EnvVariable[]
+  sftpCredentials SftpCredential[]
+  logs BotLogChunk[]
+  alerts Alert[]
+  @@unique([userId, slug])
+  @@index([nodeId, status])
+}
+
+model ResourceLimit {
+  id String @id @default(uuid()) @db.Uuid
+  scope LimitScope
+  userId String? @db.Uuid
+  botId String? @db.Uuid
+  maxBots Int?
+  cpuMillicores Int
+  memoryMb Int
+  memorySwapMb Int
+  diskMb BigInt
+  bandwidthIngressMb BigInt
+  bandwidthEgressMb BigInt
+  networkRateKbps Int?
+  pidsLimit Int @default(100)
+  maxUploadMb Int @default(100)
+  sftpRateKbps Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot Bot? @relation(fields: [botId], references: [id], onDelete: Cascade)
+}
+
+model EnvVariable {
+  id String @id @default(uuid()) @db.Uuid
+  botId String @db.Uuid
+  key String
+  encryptedValue Bytes
+  iv Bytes
+  authTag Bytes
+  keyVersion Int @default(1)
+  isSecret Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@unique([botId, key])
+}
+
+model SftpCredential {
+  id String @id @default(uuid()) @db.Uuid
+  botId String @db.Uuid
+  username String @unique
+  passwordHash String?
+  publicKey String?
+  enabled Boolean @default(true)
+  expiresAt DateTime?
+  lastUsedAt DateTime?
+  maxConnections Int @default(2)
+  uploadRateKbps Int?
+  downloadRateKbps Int?
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+}
+
+model BotLogChunk {
+  id BigInt @id @default(autoincrement())
+  botId String @db.Uuid
+  stream String
+  content String
+  firstTimestamp DateTime
+  lastTimestamp DateTime
+  byteSize Int
+  expiresAt DateTime
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@index([botId, lastTimestamp(sort: Desc)])
+}
+
+model Alert {
+  id String @id @default(uuid()) @db.Uuid
+  botId String? @db.Uuid
+  userId String? @db.Uuid
+  type String
+  severity AlertSeverity
+  status AlertStatus @default(OPEN)
+  title String
+  description String
+  metricsSnapshot Json?
+  automaticAction AutomaticAction @default(NONE)
+  actionExecutedAt DateTime?
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  bot Bot? @relation(fields: [botId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([status, severity, createdAt])
+}
+
+model AuditLog {
+  id BigInt @id @default(autoincrement())
+  actorUserId String? @db.Uuid
+  action String
+  targetType String
+  targetId String?
+  ipAddress String?
+  userAgent String?
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([targetType, targetId, createdAt])
+}
