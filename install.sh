@@ -80,7 +80,6 @@ POSTGRES_PASSWORD=$(random_hex 24)
 POSTGRES_DB=beakohost
 REDIS_PASSWORD=$(random_hex 24)
 JWT_SECRET=$(random_hex 48)
-ENCRYPTION_MASTER_KEY=$(openssl rand -base64 32 | tr -d '\n')
 AGENT_ENROLLMENT_SECRET=$(random_hex 48)
 EOF
 }
@@ -100,6 +99,7 @@ main() {
     rsync -a --delete --exclude '.git' --exclude '.env' --exclude 'node_modules' "${SOURCE_DIR}/" "${INSTALL_DIR}/"
   fi
   [[ -f "${ENV_FILE}" ]] || write_env "$domain"
+  bash "${INSTALL_DIR}/scripts/prepare-env-master-key.sh" "${ENV_FILE}"
   install -m 0755 "${INSTALL_DIR}/scripts/beakoctl" /usr/local/bin/beakoctl
   info "Construindo e iniciando os serviços..."
   cd "${INSTALL_DIR}"

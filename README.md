@@ -47,6 +47,12 @@ sudo beakoctl
 
 O menu permite ver status/logs, reiniciar, atualizar e configurar domínio com HTTPS automático. Para repositório privado, clone usando uma chave SSH ou token de acesso do GitHub.
 
+## Variáveis de ambiente dos bots
+
+Use a aba **Variáveis** dentro de cada bot. Os valores são criptografados com AES-256-GCM e nunca voltam em texto aberto pela API. No Runner, eles existem somente em um arquivo temporário com permissão `0600` durante a criação do container; o arquivo é removido imediatamente depois.
+
+O instalador cria a chave mestra em `/etc/beakohost/secrets/env-master-key`. Em uma atualização de instalação antiga, ele reaproveita automaticamente `ENCRYPTION_MASTER_KEY` para não invalidar dados já criptografados. Faça backup seguro desse arquivo: perdê-lo torna os valores armazenados irrecuperáveis.
+
 ## Estado
 
 Esta primeira entrega contém a fundação executável: monorepo, painel, API, banco completo, contratos e agente com registro seguro. O roadmap está em `docs/ROADMAP.md`.

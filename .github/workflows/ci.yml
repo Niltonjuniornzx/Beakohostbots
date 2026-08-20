@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm --filter @beako/database exec prisma validate --schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - run: pnpm --filter @beako/api lint
+      - run: pnpm --filter @beako/api test
+      - run: pnpm --filter @beako/api build
+      - run: pnpm --filter @beako/web build
+      - run: go test ./... && go vet ./...
+        working-directory: services/runner-agent
+      - run: bash -n scripts/*.sh
+      - name: Validate Docker Compose
+        run: |
+          printf '%s' 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' > env-master-key
+          POSTGRES_USER=ci POSTGRES_PASSWORD=ci POSTGRES_DB=ci REDIS_PASSWORD=ci JWT_SECRET=ci-test-only AGENT_ENROLLMENT_SECRET=ci PUBLIC_URL=https://localhost ENV_MASTER_KEY_HOST_FILE="$PWD/env-master-key" docker compose -f docker-compose.prod.yml config --quiet

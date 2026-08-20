@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { BotsModule } from './bots/bots.module';
 import { AdminModule } from './admin/admin.module';
 import { AgentsModule } from './agents/agents.module';
+import { EnvModule } from './env/env.module';
 
 @Controller('health')
 class HealthController {
@@ -12,5 +13,5 @@ class HealthController {
   }
 }
 
-@Module({ imports: [PrismaModule, AuthModule, BotsModule, AdminModule, AgentsModule], controllers: [HealthController] })
+@Module({ imports: [PrismaModule, AuthModule, EnvModule, BotsModule, AdminModule, AgentsModule], controllers: [HealthController] })
 export class AppModule {}

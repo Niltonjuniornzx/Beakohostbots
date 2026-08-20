@@ -2,12 +2,13 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { BotTelemetryDto, CompleteJobDto, EnrollAgentDto, HeartbeatDto } from './agents.dto';
+import { EnvService } from '../env/env.service';
 
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 
 @Injectable()
 export class AgentsService {
-  constructor(private readonly prisma:PrismaService){}
+  constructor(private readonly prisma:PrismaService,private readonly env:EnvService){}
   async enroll(input:EnrollAgentDto){
     const enrollment=await this.prisma.nodeEnrollment.findUnique({where:{tokenHash:digest(input.token)},include:{node:true}});
     if(!enrollment||enrollment.consumedAt||enrollment.expiresAt<=new Date())throw new UnauthorizedException('Token inválido, expirado ou já utilizado');
@@ -28,10 +29,11 @@ export class AgentsService {
     const node=await this.authenticate(authorization);
     const queued=await this.prisma.agentJob.findFirst({where:{nodeId:node.id,status:'QUEUED'},orderBy:{createdAt:'asc'},include:{bot:{include:{runtime:true,files:{select:{path:true,content:true,byteSize:true}},limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1}}}}}}});
     if(!queued){const monitorBotIds=await this.prisma.bot.findMany({where:{nodeId:node.id,status:{in:['RUNNING','STARTING','CRASHED']}},select:{id:true}});return{job:null,pollAfterSeconds:3,monitorBotIds:monitorBotIds.map(bot=>bot.id)}};
+    const environment=await this.env.resolvedForRunner(queued.bot.id);
     const claimed=await this.prisma.agentJob.updateMany({where:{id:queued.id,status:'QUEUED'},data:{status:'RUNNING',startedAt:new Date()}});
     if(!claimed.count)return{job:null,pollAfterSeconds:1};
     const limit=queued.bot.limits[0]||queued.bot.user.limits[0];
-    return{job:{id:queued.id,action:queued.action,bot:{id:queued.bot.id,entrypoint:queued.bot.entrypoint,image:`${queued.bot.runtime.imageRepository}:${queued.bot.runtime.imageTag}`,startCommand:queued.bot.startCommand,files:queued.bot.files.filter(file=>!file.path.endsWith('/.beako-dir')).map(file=>({path:file.path,contentBase64:Buffer.from(file.content).toString('base64'),byteSize:file.byteSize})),limits:{cpuMillicores:limit?.cpuMillicores??250,memoryMb:limit?.memoryMb??256,pidsLimit:limit?.pidsLimit??100}}},pollAfterSeconds:0};
+    return{job:{id:queued.id,action:queued.action,bot:{id:queued.bot.id,entrypoint:queued.bot.entrypoint,image:`${queued.bot.runtime.imageRepository}:${queued.bot.runtime.imageTag}`,startCommand:queued.bot.startCommand,environment,files:queued.bot.files.filter(file=>!file.path.split('/').includes('.env')&&!file.path.endsWith('/.beako-dir')).map(file=>({path:file.path,contentBase64:Buffer.from(file.content).toString('base64'),byteSize:file.byteSize})),limits:{cpuMillicores:limit?.cpuMillicores??250,memoryMb:limit?.memoryMb??256,pidsLimit:limit?.pidsLimit??100}}},pollAfterSeconds:0};
   }
   async completeJob(authorization:string|undefined,id:string,input:CompleteJobDto){
     const node=await this.authenticate(authorization);
