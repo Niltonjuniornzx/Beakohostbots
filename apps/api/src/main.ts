@@ -6,7 +6,7 @@ import { AppModule } from './modules/app.module';
 import cookie from '@fastify/cookie';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter({ bodyLimit: 160 * 1024 * 1024 }));
   // Nest's Fastify adapter and @fastify/cookie can resolve separate copies of
   // Fastify's augmented types under pnpm. Runtime APIs are compatible.
   await app.register(cookie as any, { secret: process.env.JWT_SECRET });

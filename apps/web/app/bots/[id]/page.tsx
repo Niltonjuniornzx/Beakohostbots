@@ -1,27 +1,33 @@
 'use client';
 import {ChangeEvent,useEffect,useMemo,useRef,useState} from'react';
 import{useParams}from'next/navigation';
-import{Archive,Box,ChevronRight,CircleGauge,Code2,Download,File as FileIcon,FilePlus,Folder,FolderPlus,HardDrive,Package,Pencil,Play,RotateCw,Save,Search,Settings,Square,Terminal,Trash2,TriangleAlert,Upload,X}from'lucide-react';
+import{Archive,ArrowLeft,Box,Check,ChevronRight,CircleGauge,Code2,Download,File as FileIcon,FilePlus,Folder,FolderInput,FolderPlus,HardDrive,Package,Pencil,Play,Plus,RotateCw,Save,Search,Settings,Square,Terminal,Trash2,TriangleAlert,Upload,X}from'lucide-react';
 import PageShell from'../../components/PageShell';
-type BotFile={id:string;path:string;byteSize:number;updatedAt:string;isDirectory:boolean};type Job={id:string;action:string;status:string;output?:string;error?:string;createdAt:string};type Dep={detected:string[];declared:string[];missing:string[];hasPackageJson:boolean};type Limits={cpuMillicores:number;memoryMb:number;diskMb:number};type BotData={name:string;status:string;entrypoint:string;cpuUsagePercent:number;memoryUsageMb:number;diskUsageMb:number;lastMetricsAt:string|null;effectiveLimits:Limits;planLimits:Limits;runtime:{language:string;version:string;variant:string};node:null|{id:string;name:string;status:string;agentVersion:string|null}};type View='console'|'files'|'dependencies'|'startup'|'settings';
+type BotFile={id:string;path:string;byteSize:number;updatedAt:string;isDirectory:boolean};type Job={id:string;action:string;status:string;output?:string;error?:string;createdAt:string};type Dep={language?:string;detected:string[];declared:string[];missing:string[];hasPackageJson:boolean;catalog:string[]};type Limits={cpuMillicores:number;memoryMb:number;diskMb:number};type BotData={name:string;status:string;entrypoint:string;cpuUsagePercent:number;memoryUsageMb:number;diskUsageMb:number;lastMetricsAt:string|null;effectiveLimits:Limits;planLimits:Limits;runtime:{language:string;version:string;variant:string};node:null|{id:string;name:string;status:string;agentVersion:string|null}};type View='console'|'files'|'dependencies'|'startup'|'settings';
 const b64=(file:File)=>new Promise<string>((ok,fail)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>fail(r.error);r.readAsDataURL(file)});
 const bytes=(n:number)=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';const date=(v:string)=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(v));
-export default function BotDetail(){const{id}=useParams<{id:string}>();const[bot,setBot]=useState<BotData|null>(null),[files,setFiles]=useState<BotFile[]>([]),[jobs,setJobs]=useState<Job[]>([]),[logs,setLogs]=useState(''),[view,setView]=useState<View>('console'),[path,setPath]=useState(''),[search,setSearch]=useState(''),[editor,setEditor]=useState<{path:string;content:string}|null>(null),[dep,setDep]=useState<Dep>({detected:[],declared:[],missing:[],hasPackageJson:false}),[selected,setSelected]=useState<string[]>([]),[uploading,setUploading]=useState(false),[message,setMessage]=useState('');const input=useRef<HTMLInputElement>(null);
-const[adminNodes,setAdminNodes]=useState<any[]>([]),[busy,setBusy]=useState(''),[limits,setLimits]=useState<Limits>({cpuMillicores:250,memoryMb:256,diskMb:1024});
-const load=()=>Promise.all([fetch('/api/bots/'+id).then(r=>r.ok?r.json():null),fetch('/api/bots/'+id+'/files').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/jobs').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/dependencies').then(r=>r.ok?r.json():{detected:[],declared:[],missing:[],hasPackageJson:false}),fetch('/api/bots/'+id+'/logs').then(r=>r.ok?r.json():{content:''})]).then(([b,f,j,d,l])=>{setBot(b);setFiles(f);setJobs(j);setDep(d);setLogs(l.content||'');setSelected(s=>s.length?s:d.missing)});
+export default function BotDetail(){const{id}=useParams<{id:string}>();const[bot,setBot]=useState<BotData|null>(null),[files,setFiles]=useState<BotFile[]>([]),[jobs,setJobs]=useState<Job[]>([]),[logs,setLogs]=useState(''),[view,setView]=useState<View>('console'),[path,setPath]=useState(''),[search,setSearch]=useState(''),[depSearch,setDepSearch]=useState(''),[editor,setEditor]=useState<{path:string;content:string}|null>(null),[dep,setDep]=useState<Dep>({detected:[],declared:[],missing:[],hasPackageJson:false,catalog:[]}),[selected,setSelected]=useState<string[]>([]),[fileSelected,setFileSelected]=useState<string[]>([]),[moveOpen,setMoveOpen]=useState(false),[moveDestination,setMoveDestination]=useState(''),[uploading,setUploading]=useState(false),[message,setMessage]=useState('');const input=useRef<HTMLInputElement>(null);
+const[adminNodes,setAdminNodes]=useState<any[]>([]),[busy,setBusy]=useState(''),[limits,setLimits]=useState<Limits>({cpuMillicores:250,memoryMb:256,diskMb:1024}),[startupEntry,setStartupEntry]=useState('');
+const load=()=>Promise.all([fetch('/api/bots/'+id).then(r=>r.ok?r.json():null),fetch('/api/bots/'+id+'/files').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/jobs').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/dependencies').then(r=>r.ok?r.json():{detected:[],declared:[],missing:[],hasPackageJson:false,catalog:[]}),fetch('/api/bots/'+id+'/logs').then(r=>r.ok?r.json():{content:''})]).then(([b,f,j,d,l])=>{setBot(b);setFiles(f);setJobs(j);setDep({...d,catalog:d.catalog||d.detected||[]});setLogs(l.content||'');setSelected(s=>s.length?s:d.missing)});
 useEffect(()=>{void load();const timer=setInterval(()=>void load(),3000);return()=>clearInterval(timer)},[id]);
 useEffect(()=>{fetch('/api/admin/nodes').then(r=>r.ok?r.json():[]).then(setAdminNodes).catch(()=>setAdminNodes([]))},[]);
 useEffect(()=>{if(bot?.effectiveLimits)setLimits(bot.effectiveLimits)},[bot?.effectiveLimits.cpuMillicores,bot?.effectiveLimits.memoryMb,bot?.effectiveLimits.diskMb]);
+useEffect(()=>{if(bot?.entrypoint)setStartupEntry(bot.entrypoint)},[bot?.entrypoint]);
 useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessage(''),5000);return()=>clearTimeout(timer)},[message]);
 async function api(route:string,options?:RequestInit){const r=await fetch('/api/bots/'+id+route,options),body=await r.json().catch(()=>({}));if(!r.ok)throw Error(Array.isArray(body.message)?body.message.join(', '):body.message||'Operação não concluída');return body}const json=(body:unknown)=>({method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-async function run(action:string){setMessage('');setBusy(action);try{await api('/actions',json({action}));setMessage(action==='STOP'?'Comando de parada enviado.':'Comando enviado ao Runner. Acompanhe o andamento nas tarefas.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}async function install(){setBusy('INSTALL');try{await api('/dependencies/install',json({packages:selected}));setMessage('Instalação adicionada à fila.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
+async function run(action:string){setMessage('');setBusy(action);try{await api('/actions',json({action}));setMessage(action==='STOP'?'Comando de parada enviado.':'Comando enviado ao Runner. Acompanhe o andamento nas tarefas.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}async function install(){setBusy('INSTALL');try{await api('/dependencies/install',json({packages:selected}));setMessage('O bot será parado e as dependências selecionadas serão instaladas. Depois, inicie-o novamente.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
 async function deploy(){setBusy('DEPLOY');try{await api('/deploy',{method:'POST'});setMessage('Deploy automático: sincronizando, instalando dependências e iniciando o bot.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 async function saveLimits(){setBusy('LIMITS');try{const result=await api('/limits',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(limits)});setLimits(result.effectiveLimits);setMessage('Limites salvos. Reinicie o bot para aplicar CPU e memória ao container.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
+async function saveStartup(){setBusy('STARTUP');try{await api('/startup',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({entrypoint:startupEntry})});setMessage('Arquivo inicial salvo. A nova configuração será usada no próximo deploy.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
+async function editStartupFile(file:string){setView('files');setPath(file.includes('/')?file.slice(0,file.lastIndexOf('/')):'');await open(file)}
 async function deleteBot(){if(!confirm('Excluir este bot, o container e todos os arquivos permanentemente?'))return;if(!confirm('Esta ação não pode ser desfeita. Deseja continuar?'))return;try{const result=await api('',{method:'DELETE'});if(result.queued){setMessage('Exclusão enviada ao Runner. O bot desaparecerá após a limpeza.');setTimeout(()=>window.location.href='/bots',1800)}else window.location.href='/bots'}catch(e){setMessage((e as Error).message)}}
 async function migrate(nodeId:string){if(!nodeId||nodeId===bot?.node?.id)return;if(bot?.status!=='STOPPED'){setMessage('Pare o bot antes de migrar para outro servidor.');return}const response=await fetch('/api/admin/bots/'+id+'/node',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({nodeId})});const body=await response.json().catch(()=>({}));if(!response.ok){setMessage(body.message||'Não foi possível migrar o bot');return}setMessage('Bot migrado. O próximo deploy será executado no novo Runner.');await load()}
-async function upload(e:ChangeEvent<HTMLInputElement>){const list=Array.from(e.target.files||[]);if(!list.length)return;setUploading(true);try{for(const f of list)await api('/files',json({path:[path,f.name].filter(Boolean).join('/'),contentBase64:await b64(f)}));await deploy()}catch(x){setMessage((x as Error).message)}e.target.value='';setUploading(false);await load()}
+async function upload(e:ChangeEvent<HTMLInputElement>){const list=Array.from(e.target.files||[]);if(!list.length)return;setUploading(true);setMessage(`Preparando ${list.length} arquivo(s)...`);try{const payload=[];for(let index=0;index<list.length;index++){const file=list[index];setMessage(`Preparando arquivo ${index+1} de ${list.length}: ${file.name}`);payload.push({path:[path,file.name].filter(Boolean).join('/'),contentBase64:await b64(file)})}setMessage(`Enviando ${list.length} arquivo(s). Aguarde a conclusão...`);const result=await api('/files/batch',json({files:payload}));setMessage(`${result.uploaded} arquivo(s) enviados com sucesso. Dependências analisadas; clique em Iniciar quando estiver pronto.`)}catch(x){setMessage((x as Error).message)}e.target.value='';setUploading(false);await load()}
 async function create(type:'FILE'|'DIRECTORY'){const name=prompt(type==='FILE'?'Nome do arquivo:':'Nome da pasta:');if(!name)return;try{await api('/files/create',json({path:[path,name].filter(Boolean).join('/'),type}));if(type==='FILE')await open([path,name].filter(Boolean).join('/'))}catch(e){setMessage((e as Error).message)}await load()}async function open(file:string){try{const x=await api('/files/content?path='+encodeURIComponent(file));setEditor({path:file,content:x.content})}catch(e){setMessage((e as Error).message)}}async function save(){if(!editor)return;try{await api('/files',json({path:editor.path,contentBase64:await b64(new File([editor.content],editor.path))}));setMessage('Arquivo salvo e sincronização adicionada à fila.')}catch(e){setMessage((e as Error).message)}await load()}async function rename(file:string){const to=prompt('Novo nome ou caminho:',file);if(!to||to===file)return;try{await api('/files/rename',json({from:file,to}));setMessage('Item renomeado.')}catch(e){setMessage((e as Error).message)}await load()}async function remove(file:string){if(!confirm('Excluir “'+file+'” permanentemente?'))return;try{await api('/files/delete',json({path:file}));setMessage('Item excluído.')}catch(e){setMessage((e as Error).message)}await load()}async function extract(file:string){const destination=prompt('Pasta de destino (vazio = pasta atual):',path)||undefined;try{const x=await api('/files/extract',json({path:file,destination,deleteArchive:false}));setMessage(x.filesExtracted+' arquivo(s) extraído(s).')}catch(e){setMessage((e as Error).message)}await load()}async function download(file:string){try{const x=await api('/files/download?path='+encodeURIComponent(file)),data=Uint8Array.from(atob(x.contentBase64),(c)=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([data]));const a=document.createElement('a');a.href=url;a.download=file.split('/').pop()||'arquivo';a.click();URL.revokeObjectURL(url)}catch(e){setMessage((e as Error).message)}}
-const visible=useMemo(()=>{const prefix=path?path+'/':'',map=new Map<string,BotFile>();for(const f of files){if(!f.path.startsWith(prefix)||f.path===path)continue;const rel=f.path.slice(prefix.length),first=rel.split('/')[0],p=prefix+first;map.set(p,rel.includes('/')?{id:'dir-'+p,path:p,byteSize:0,updatedAt:f.updatedAt,isDirectory:true}:f)}return[...map.values()].filter(f=>f.path.split('/').pop()?.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(b.isDirectory)-Number(a.isDirectory)||a.path.localeCompare(b.path))},[files,path,search]);if(!bot)return <PageShell>
+async function moveFiles(){if(!fileSelected.length)return;setBusy('MOVE');try{const result=await api('/files/move',json({paths:fileSelected,destination:moveDestination}));setMessage(result.moved+' item(ns) movido(s).');setFileSelected([]);setMoveOpen(false)}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
+async function removeSelected(){if(!fileSelected.length||!confirm(`Excluir ${fileSelected.length} item(ns) e todo o conteúdo das pastas?`))return;setBusy('DELETE_FILES');try{await api('/files/delete-many',json({paths:fileSelected}));setMessage(fileSelected.length+' item(ns) excluído(s).');setFileSelected([])}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
+function toggleFile(file:string){setFileSelected(current=>current.includes(file)?current.filter(item=>item!==file):[...current,file])}
+const visible=useMemo(()=>{const prefix=path?path+'/':'',map=new Map<string,BotFile>();for(const f of files){if(!f.path.startsWith(prefix)||f.path===path)continue;const rel=f.path.slice(prefix.length),first=rel.split('/')[0],p=prefix+first;map.set(p,rel.includes('/')?{id:'dir-'+p,path:p,byteSize:0,updatedAt:f.updatedAt,isDirectory:true}:f)}return[...map.values()].filter(f=>f.path.split('/').pop()?.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(b.isDirectory)-Number(a.isDirectory)||a.path.localeCompare(b.path))},[files,path,search]);const directories=useMemo(()=>{const result=new Set<string>();for(const file of files){const parts=file.path.split('/');if(file.isDirectory)result.add(file.path);for(let i=1;i<parts.length;i++)result.add(parts.slice(0,i).join('/'))}return[...result].sort()},[files]);const dependencyChoices=[...new Set([...dep.detected,...dep.catalog])].filter(name=>name.toLowerCase().includes(depSearch.toLowerCase())).sort((a,b)=>Number(dep.detected.includes(b))-Number(dep.detected.includes(a))||a.localeCompare(b));if(!bot)return <PageShell>
 <div className="loader"/>
 </PageShell>;const online=bot.node?.status==='ONLINE',crumbs=path.split('/').filter(Boolean),used=files.reduce((n,f)=>n+f.byteSize,0),runtime=bot.runtime.language==='NODEJS'?'Node.js':'Python',entrypointExists=files.some(file=>!file.isDirectory&&file.path===bot.entrypoint),latestFailure=jobs.find(job=>job.status==='FAILED');const nav:[View,string,React.ReactNode][]=[['console','Console',<Terminal key="c"/>],['files','Arquivos',<Folder key="f"/>],['dependencies','Dependências',<Package key="d"/>],['startup','Inicialização',<Code2 key="s"/>],['settings','Configurações',<Settings key="x"/>]];
 return <PageShell>
@@ -172,6 +178,7 @@ return <PageShell>
 <p>Conteúdo persistente do bot em /home/container.</p>
 </div>
 <div>
+{path&&<button title="Mover todo o conteúdo desta pasta" onClick={()=>{setFileSelected(visible.map(item=>item.path));setMoveDestination('');setMoveOpen(true)}}><FolderInput/>Levar conteúdo à raiz</button>}
 <button onClick={()=>create('DIRECTORY')}>
 <FolderPlus/>Nova pasta</button>
 <button onClick={()=>create('FILE')}>
@@ -181,8 +188,10 @@ return <PageShell>
 <input ref={input} type="file" multiple onChange={upload} disabled={uploading}/>
 </div>
 </div>
+{fileSelected.length>0&&<div className="selectionBar"><div><span>{fileSelected.length}</span><b>item(ns) selecionado(s)</b></div><button onClick={()=>{setMoveDestination(path);setMoveOpen(true)}}><FolderInput/>Mover</button><button className="delete" disabled={busy==='DELETE_FILES'} onClick={removeSelected}><Trash2/>Excluir</button><button className="clearSelection" onClick={()=>setFileSelected([])}><X/>Limpar</button></div>}
 <div className="filePathBar">
 <div>
+{path&&<button className="backFolder" onClick={()=>setPath(path.includes('/')?path.slice(0,path.lastIndexOf('/')):'')}><ArrowLeft/>Voltar</button>}
 <button onClick={()=>setPath('')}>/home/container</button>{crumbs.map((c,i)=>
 <span key={i}>/<button onClick={()=>setPath(crumbs.slice(0,i+1).join('/'))}>{c}</button>
 </span>)}</div>
@@ -193,6 +202,7 @@ return <PageShell>
 </div>
 <div className="fileTable">
 <div className="fileTableHead">
+<span className="selectCell"><button className={visible.length>0&&visible.every(item=>fileSelected.includes(item.path))?'checked':''} onClick={()=>setFileSelected(visible.every(item=>fileSelected.includes(item.path))?fileSelected.filter(item=>!visible.some(file=>file.path===item)):Array.from(new Set([...fileSelected,...visible.map(item=>item.path)])))}>{visible.length>0&&visible.every(item=>fileSelected.includes(item.path))&&<Check/>}</button></span>
 <span>NOME</span>
 <span>TAMANHO</span>
 <span>MODIFICADO</span>
@@ -203,6 +213,7 @@ return <PageShell>
 <p>Envie arquivos ou crie um novo arquivo.</p>
 </div>:visible.map(f=>
 <div className="fileTableRow" key={f.path}>
+<span className="selectCell"><button className={fileSelected.includes(f.path)?'checked':''} onClick={()=>toggleFile(f.path)}>{fileSelected.includes(f.path)&&<Check/>}</button></span>
 <button className="fileName" onClick={()=>f.isDirectory?setPath(f.path):open(f.path)}>{f.isDirectory?<Folder/>:<FileIcon/>}<b>{f.path.split('/').pop()}</b>
 </button>
 <span>{f.isDirectory?'—':bytes(f.byteSize)}</span>
@@ -219,24 +230,25 @@ return <PageShell>
 </button>
 </div>
 </div>)}</div>
+{moveOpen&&<div className="fileModalBackdrop" onClick={()=>setMoveOpen(false)}><section className="fileModal" onClick={e=>e.stopPropagation()}><header><div><small>MOVER ITENS</small><h3>Escolha a pasta de destino</h3></div><button onClick={()=>setMoveOpen(false)}><X/></button></header><label>Destino<select value={moveDestination} onChange={e=>setMoveDestination(e.target.value)}><option value="">/home/container (raiz)</option>{directories.filter(dir=>!fileSelected.some(item=>dir===item||dir.startsWith(item+'/'))).map(dir=><option value={dir} key={dir}>/home/container/{dir}</option>)}</select></label><div className="moveSummary"><FolderInput/><span>{fileSelected.length} item(ns) serão movidos para <b>/home/container{moveDestination?'/'+moveDestination:''}</b></span></div><footer><button onClick={()=>setMoveOpen(false)}>Cancelar</button><button className="primary" disabled={busy==='MOVE'} onClick={moveFiles}>{busy==='MOVE'?'Movendo...':'Mover itens'}</button></footer></section></div>}
 </>}</section>}
 {view==='dependencies'&&<section className="dependencyManager">
 <header>
 <div>
 <h2>Dependências e módulos</h2>
-<p>Imports e require() detectados automaticamente.</p>
+<p>Pesquise, selecione e instale os pacotes usados pelo seu bot.</p>
 </div>
 <button disabled={!online||!selected.length} onClick={install}>Instalar selecionadas</button>
-</header>{!dep.detected.length?<div className="emptyFiles">
+</header><div className="dependencySearch"><Search/><input value={depSearch} onChange={e=>setDepSearch(e.target.value)} placeholder={bot.runtime.language==='PYTHON'?'Pesquisar pacote Python...':'Pesquisar pacote Node.js...'}/>{depSearch&&/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i.test(depSearch)&&!dependencyChoices.some(name=>name.toLowerCase()===depSearch.toLowerCase())&&<button onClick={()=>{setDep(d=>({...d,catalog:[...d.catalog,depSearch]}));setSelected(s=>[...new Set([...s,depSearch])]);setDepSearch('')}}><Plus/>Adicionar</button>}</div>{!dependencyChoices.length?<div className="emptyFiles">
 <Package/>
-<h3>Nenhuma dependência externa</h3>
-<p>Faça upload do código para iniciar a análise.</p>
-</div>:<div className="dependencyList">{dep.detected.map(name=>
+<h3>Nenhum pacote encontrado</h3>
+<p>Digite o nome exato do pacote para adicioná-lo.</p>
+</div>:<div className="dependencyList">{dependencyChoices.map(name=>
 <label key={name}>
 <input type="checkbox" checked={selected.includes(name)} disabled={dep.declared.includes(name)} onChange={e=>setSelected(s=>e.target.checked?[...s,name]:s.filter(x=>x!==name))}/>
 <div>
 <b>{name}</b>
-<small>{dep.declared.includes(name)?'Declarado no package.json':'Detectado no código · pendente'}</small>
+<small>{dep.declared.includes(name)?`Declarado no ${bot.runtime.language==='PYTHON'?'requirements.txt':'package.json'}`:dep.detected.includes(name)?'Detectado automaticamente no código':'Disponível para instalação'}</small>
 </div>
 <span className={dep.declared.includes(name)?'installed':'pending'}>{dep.declared.includes(name)?'INSTALADO':'PENDENTE'}</span>
 </label>)}</div>}<footer>
@@ -258,15 +270,18 @@ return <PageShell>
 </article>
 <article>
 <label>ARQUIVO INICIAL</label>
-<div>
-<b>{bot.entrypoint}</b>
-<span>Comando: {bot.runtime.language==='NODEJS'?'node':'python'} {bot.entrypoint}</span>
+<div className="startupEdit">
+<input value={startupEntry} onChange={e=>setStartupEntry(e.target.value)} placeholder={bot.runtime.language==='NODEJS'?'index.js':'main.py'}/>
+<span>Comando: {bot.runtime.language==='NODEJS'?'node':'python'} {startupEntry}</span>
+<button onClick={()=>editStartupFile(startupEntry)} disabled={!files.some(file=>!file.isDirectory&&file.path===startupEntry)}><Pencil/>Editar arquivo</button>
+<button className="primary" onClick={saveStartup} disabled={busy==='STARTUP'||startupEntry===bot.entrypoint}>{busy==='STARTUP'?'Salvando...':'Salvar'}</button>
 </div>
 </article>
 <article>
 <label>DEPENDÊNCIAS</label>
 <div>
 <b>{bot.runtime.language==='NODEJS'?'package.json':'requirements.txt'}</b>
+<button onClick={()=>editStartupFile(bot.runtime.language==='NODEJS'?'package.json':'requirements.txt')} disabled={!files.some(file=>file.path===(bot.runtime.language==='NODEJS'?'package.json':'requirements.txt'))}><Pencil/>Editar</button>
 <button disabled={!online} onClick={()=>run('INSTALL')}>Executar instalação</button>
 </div>
 </article>

@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const agentVersion = "0.10.0"
+const agentVersion = "0.10.3"
 
 var managedRuntimeImages = []string{"node:24-alpine", "node:22-alpine", "python:3.13-alpine", "python:3.12-alpine"}
 
@@ -332,7 +332,7 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 	if err:=os.MkdirAll(root,0750);err!=nil{return "","",err}
 	if err:=os.Chmod(root,0777);err!=nil{return "","",err}
 	entries,err:=os.ReadDir(root);if err!=nil{return "","",err}
-	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".venv" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
+	for _,entry:=range entries { if entry.Name()!="node_modules"&&entry.Name()!=".beako-python" { if err=os.RemoveAll(filepath.Join(root,entry.Name()));err!=nil{return "","",err} } }
 	for _,file:=range files {
 		clean:=filepath.Clean(file.Path)
 		if clean=="."||filepath.IsAbs(clean)||strings.HasPrefix(clean,".."+string(os.PathSeparator))||clean==".." { return "","",fmt.Errorf("unsafe file path %q",file.Path) }
@@ -348,11 +348,12 @@ func syncFiles(appDir string, files []jobFile) (string,string,error) {
 }
 
 func runInstall(appDir string, job runnerJob) (string,string,error) {
+	_,_,_=dockerCommand("rm","-f",containerName(job.Bot.ID))
 	var command []string
 	if strings.HasPrefix(job.Bot.Image,"node:") {
 		if fileExists(filepath.Join(appDir,"package.json")) { command=[]string{"sh","-lc","umask 000 && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"} } else { return "","",errors.New("package.json não encontrado") }
 	} else {
-		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","umask 000 && python -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","umask 000 && python -m venv .venv && .venv/bin/pip install --no-cache-dir ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
+		if fileExists(filepath.Join(appDir,"requirements.txt")) { command=[]string{"sh","-lc","umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python -r requirements.txt"} } else if fileExists(filepath.Join(appDir,"pyproject.toml")) { command=[]string{"sh","-lc","umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python ."} } else { return "","",errors.New("requirements.txt ou pyproject.toml não encontrado") }
 	}
 	args:=[]string{"run","--rm","--user","0:0","--network","bridge","--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
 	args=append(args,command...)
@@ -365,9 +366,11 @@ func startContainer(appDir string, job runnerJob) (string,string,error) {
 	cpu:=fmt.Sprintf("%.3f",float64(job.Bot.Limits.CPUMillicores)/1000)
 	memory:=fmt.Sprintf("%dm",job.Bot.Limits.MemoryMB)
 	pids:=strconv.Itoa(job.Bot.Limits.PidsLimit)
-	args:=[]string{"run","-d","--name",name,"--restart","on-failure:5","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app",job.Bot.Image}
+	args:=[]string{"run","-d","--name",name,"--restart","on-failure:5","--network","bridge","--cpus",cpu,"--memory",memory,"--pids-limit",pids,"--security-opt","no-new-privileges","--cap-drop","ALL","-v",appDir+":/app","-w","/app"}
+	if fileExists(filepath.Join(appDir,".env")) { args=append(args,"--env-file",filepath.Join(appDir,".env")) }
+	if strings.HasPrefix(job.Bot.Image,"python:") { args=append(args,"-e","PYTHONPATH=/app/.beako-python") }
+	args=append(args,job.Bot.Image)
 	startCommand:=append([]string(nil),job.Bot.StartCommand...)
-	if strings.HasPrefix(job.Bot.Image,"python:")&&fileExists(filepath.Join(appDir,".venv","bin","python"))&&len(startCommand)>0 { startCommand[0]=".venv/bin/python" }
 	args=append(args,startCommand...)
 	output,_,err:=dockerCommand(args...)
 	return output,strings.TrimSpace(output),err

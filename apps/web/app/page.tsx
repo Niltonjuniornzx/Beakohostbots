@@ -1,52 +1,45 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Activity, Bot, Cpu, HardDrive, LogOut, MemoryStick, Plus, Server, Settings, ShieldCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bot, Cpu, MemoryStick, Plus, Server, Sparkles, ArrowUpRight, CircleAlert } from 'lucide-react';
+import PageShell from './components/PageShell';
 
 type BotItem = { id: string; name: string; status: string; cpuUsagePercent: number; memoryUsageMb: number; runtime: { language: string; version: string; variant: string }; node: null | { name: string; status: string } };
-
-const statusLabel = (status:string) => ({RUNNING:'Online',CRASHED:'Com falha',STARTING:'Iniciando',STOPPING:'Parando',STOPPED:'Parado'}[status] ?? status);
+const statusLabel = (status: string) => ({ RUNNING: 'Online', CRASHED: 'Com falha', STARTING: 'Iniciando', STOPPING: 'Parando', STOPPED: 'Parado' }[status] ?? status);
 
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<{ displayName: string; role: string } | null>(null);
   const [bots, setBots] = useState<BotItem[]>([]);
-  const [limits, setLimits] = useState<{maxBots:number}|null>(null);
-  useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' }).then(async (response) => {
-      if (!response.ok) return router.replace('/login');
-      setUser(await response.json());
-      const botsResponse = await fetch('/api/bots', { credentials: 'include' });
-      if (botsResponse.ok) setBots(await botsResponse.json());
-      const limitsResponse = await fetch('/api/auth/me/limits', { credentials: 'include' });
-      if (limitsResponse.ok) setLimits(await limitsResponse.json());
-    }).catch(() => router.replace('/login'));
-  }, [router]);
-  async function logout() { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); router.replace('/login'); }
+  const [limits, setLimits] = useState<{ maxBots: number } | null>(null);
+  useEffect(() => { Promise.all([
+    fetch('/api/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
+    fetch('/api/bots', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+    fetch('/api/auth/me/limits', { credentials: 'include' }).then(r => r.ok ? r.json() : null)
+  ]).then(([currentUser, currentBots, currentLimits]) => { if (!currentUser) return router.replace('/login'); setUser(currentUser); setBots(currentBots); setLimits(currentLimits); }).catch(() => router.replace('/login')); }, [router]);
   if (!user) return <main className="loading"><div className="loader"/><p>Carregando painel...</p></main>;
-  return <main className="shell">
-    <aside>
-      <div className="brand"><div className="logo"><Bot size={23}/></div><div><b>BeakoHost</b><small>Bot Cloud</small></div></div>
-      <nav><Link className="active" href="/"><Activity/>Visão geral</Link><Link href="/bots"><Bot/>Meus bots</Link><Link href="/files"><HardDrive/>Arquivos</Link><Link href="/security"><ShieldCheck/>Segurança</Link>{user.role==='ADMIN'&&<Link href="/admin"><Settings/>Administração</Link>}</nav>
-      <div className="account"><span>{user.displayName.slice(0, 2).toUpperCase()}</span><div><b>{user.displayName}</b><small>{user.role === 'ADMIN' ? 'Administrador' : 'Usuário'}</small></div><button className="logout" onClick={logout} title="Sair"><LogOut/></button></div>
-    </aside>
-    <section className="content">
-      <header><div><small>PAINEL DE CONTROLE</small><h1>Olá, {user.displayName.split(' ')[0]}</h1><p>Seus bots e servidores em um só lugar.</p></div><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></header>
-      <div className="stats">
-        <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length} <em>/ {limits?.maxBots??5}</em></strong></div></article>
-        <article><div className="icon blue"><Cpu/></div><div><small>BOTS EXECUTANDO</small><strong>{bots.filter(bot => bot.status === 'RUNNING').length}</strong></div></article>
-        <article><div className="icon green"><MemoryStick/></div><div><small>MEMÓRIA EM USO</small><strong>{bots.reduce((total,bot)=>total+(bot.memoryUsageMb||0),0)} MB</strong></div></article>
-        <article><div className="icon orange"><Server/></div><div><small>NÓS ONLINE</small><strong>{new Set(bots.filter(bot => bot.node?.status === 'ONLINE').map(bot => bot.node?.name)).size}</strong></div></article>
-      </div>
-      <div className="panelTitle"><div><h2>Seus bots</h2><p>Dados cadastrados na sua conta.</p></div><Link href="/bots">Ver todos →</Link></div>
-      {bots.length === 0 ? <div className="emptyState"><Bot/><h3>Nenhum bot criado</h3><p>Crie seu primeiro bot para começar.</p><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></div> : <div className="botGrid">{bots.slice(0, 4).map((bot) => <article className="botCard" key={bot.id}>
-        <div className="botTop"><div className="botIcon"><Bot/></div><div><h3>{bot.name}</h3><p>{bot.runtime.language === 'NODEJS' ? 'Node.js' : 'Python'} {bot.runtime.version} · {bot.runtime.variant}</p></div><span className={bot.status === 'RUNNING' ? 'online' : bot.status === 'CRASHED' ? 'failed' : 'offline'}>{statusLabel(bot.status)}</span></div>
-        <div className="meter"><label><span>RAM</span><b>{bot.memoryUsageMb||0} MB</b></label><i><u style={{width: Math.min(100,(bot.memoryUsageMb||0)/256*100)+'%'}}/></i></div>
-        <div className="botFoot"><span><Cpu/> {(bot.cpuUsagePercent||0).toFixed(1)}% CPU</span><Link className="manage" href={`/bots/${bot.id}`}>Gerenciar</Link></div>
-      </article>)}</div>}
-      {user.role==='ADMIN'&&<div className="node"><div className="nodeHead"><div><Server/><div><h3>Infraestrutura de execução</h3><p>Servidores são controlados somente por administradores.</p></div></div><Link className="manage" href="/admin/servers">Gerenciar</Link></div></div>}
-    </section>
-  </main>;
+  const running = bots.filter(bot => bot.status === 'RUNNING').length;
+  const failing = bots.filter(bot => bot.status === 'CRASHED').length;
+  const memory = bots.reduce((total, bot) => total + (bot.memoryUsageMb || 0), 0);
+  const onlineNodes = new Set(bots.filter(bot => bot.node?.status === 'ONLINE').map(bot => bot.node?.name)).size;
+  return <PageShell>
+    <header className="dashboardHeader"><div><small>VISÃO GERAL</small><h1>Olá, {user.displayName.split(' ')[0]} <span>👋</span></h1><p>Acompanhe seus bots e recursos em tempo real.</p></div><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></header>
+    {failing > 0 && <Link className="healthAlert" href="/bots"><CircleAlert/><div><b>{failing} bot{failing > 1 ? 's precisam' : ' precisa'} de atenção</b><span>Confira o diagnóstico e os últimos registros.</span></div><ArrowUpRight/></Link>}
+    <div className="stats dashboardStats">
+      <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length}<em> / {limits?.maxBots ?? 5}</em></strong><span className="statHint">{running} em execução</span></div></article>
+      <article><div className="icon blue"><Cpu/></div><div><small>BOTS EXECUTANDO</small><strong>{running}</strong><span className="statHint">Atualização automática</span></div></article>
+      <article><div className="icon green"><MemoryStick/></div><div><small>MEMÓRIA EM USO</small><strong>{memory} <em>MB</em></strong><span className="statHint">Soma dos bots ativos</span></div></article>
+      <article><div className="icon orange"><Server/></div><div><small>NÓS EM USO</small><strong>{onlineNodes}</strong><span className="statHint">Servidores disponíveis</span></div></article>
+    </div>
+    <div className="panelTitle"><div><small>APLICAÇÕES</small><h2>Seus bots</h2><p>Acesso rápido às aplicações mais recentes.</p></div><Link href="/bots">Ver todos <ArrowUpRight/></Link></div>
+    {bots.length === 0 ? <div className="emptyState dashboardEmpty"><div className="emptyGlow"><Sparkles/></div><h3>Seu espaço está pronto</h3><p>Crie seu primeiro bot e coloque sua aplicação online em poucos passos.</p><Link className="primaryButton" href="/bots/new"><Plus/>Criar primeiro bot</Link></div> : <div className="botGrid">{bots.slice(0, 4).map(bot => <article className="botCard" key={bot.id}>
+      <div className="botTop"><div className="botIcon"><Bot/></div><div><h3>{bot.name}</h3><p>{bot.runtime.language === 'NODEJS' ? 'Node.js' : 'Python'} {bot.runtime.version} · {bot.runtime.variant}</p></div><span className={bot.status === 'RUNNING' ? 'online' : bot.status === 'CRASHED' ? 'failed' : 'offline'}><i/>{statusLabel(bot.status)}</span></div>
+      <div className="botMetrics"><div><span>CPU</span><b>{(bot.cpuUsagePercent || 0).toFixed(1)}%</b></div><div><span>MEMÓRIA</span><b>{bot.memoryUsageMb || 0} MB</b></div><div><span>SERVIDOR</span><b>{bot.node?.name || 'Aguardando'}</b></div></div>
+      <div className="meter"><i><u style={{ width: Math.min(100, (bot.memoryUsageMb || 0) / 256 * 100) + '%' }}/></i></div>
+      <div className="botFoot"><span className={bot.node?.status === 'ONLINE' ? 'nodeOk' : ''}><i/>{bot.node?.status === 'ONLINE' ? 'Servidor conectado' : 'Servidor indisponível'}</span><Link className="manage" href={`/bots/${bot.id}`}>Gerenciar <ArrowUpRight/></Link></div>
+    </article>)}</div>}
+    {user.role === 'ADMIN' && <div className="node adminShortcut"><div className="nodeHead"><div><Server/><div><small>ADMINISTRAÇÃO</small><h3>Infraestrutura de execução</h3><p>Acompanhe capacidade, disponibilidade e runtimes dos servidores.</p></div></div><Link className="manage" href="/admin/servers">Abrir servidores <ArrowUpRight/></Link></div></div>}
+  </PageShell>;
 }
