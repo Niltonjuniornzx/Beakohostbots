@@ -37,9 +37,19 @@ export class BotsService {
     const maxBots=limit?.maxBots??5;
     if(currentBots>=maxBots)throw new BadRequestException(`Você atingiu o limite de ${maxBots} bot(s)`);
     const image=`${input.language==='NODEJS'?'node':'python'}:${input.version}-${input.variant.toLowerCase()}`;
-    const nodes=await this.prisma.executionNode.findMany({where:{status:'ONLINE'},include:{bots:{select:{limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1},plan:{select:{limits:{where:{scope:'PLAN'},take:1}}}}}},_count:{select:{bots:true}}}});
+    const nodes=await this.prisma.executionNode.findMany({
+      where:{status:'ONLINE'},
+      include:{
+        bots:{select:{limits:{where:{scope:'BOT'},take:1},user:{select:{limits:{where:{scope:'USER'},take:1},plan:{select:{limits:{where:{scope:'PLAN'},take:1}}}}}},
+        _count:{select:{bots:true}},
+      },
+    });
     const requested={cpu:limit?.cpuMillicores??250,memory:limit?.memoryMb??256,disk:Number(limit?.diskMb??1024n)};
-    const compatible=nodes.filter(node=>{if(!node.lastHeartbeatAt||Date.now()-node.lastHeartbeatAt.getTime()>=90000||!this.nodeImages(node.runtimeImages).includes(image))return false;const reserved=node.bots.reduce((sum,b)=>{const l=b.limits[0]||b.user.limits[0]||b.user.plan?.limits[0];sum.cpu+=l?.cpuMillicores??250;sum.memory+=l?.memoryMb??256;sum.disk+=Number(l?.diskMb??1024n);return sum},{cpu:0,memory:0,disk:0});return reserved.cpu+requested.cpu<=node.totalCpuMillicores&&reserved.memory+requested.memory<=node.totalMemoryMb&&reserved.disk+requested.disk<=Number(node.totalDiskMb)}).sort((a,b)=>a._count.bots-b._count.bots);
+    const compatible=nodes.filter(node=>{
+      if(!node.lastHeartbeatAt||Date.now()-node.lastHeartbeatAt.getTime()>=90000||!this.nodeImages(node.runtimeImages).includes(image))return false;
+      const reserved=node.bots.reduce((sum,b)=>{const l=b.limits[0]||b.user.limits[0]||b.user.plan?.limits[0];return{cpu:sum.cpu+(l?.cpuMillicores??250),memory:sum.memory+(l?.memoryMb??256),disk:sum.disk+Number(l?.diskMb??1024n)}},{cpu:0,memory:0,disk:0});
+      return reserved.cpu+requested.cpu<=node.totalCpuMillicores&&reserved.memory+requested.memory<=node.totalMemoryMb&&reserved.disk+requested.disk<=Number(node.totalDiskMb);
+    }).sort((a,b)=>a._count.bots-b._count.bots);
     if(!compatible.length)throw new BadRequestException('Nenhum Runner online possui este runtime. Atualize ou prepare uma VPS primeiro.');
     const slugBase = input.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'bot';
     const slug = `${slugBase}-${Math.random().toString(36).slice(2, 7)}`;
