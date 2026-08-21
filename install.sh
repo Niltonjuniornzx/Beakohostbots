@@ -9,26 +9,34 @@ green='\033[0;32m'; yellow='\033[1;33m'; red='\033[0;31m'; reset='\033[0m'
 info() { printf "${green}[BeakoHost]${reset} %s\n" "$*"; }
 warn() { printf "${yellow}[Aviso]${reset} %s\n" "$*"; }
 die() { printf "${red}[Erro]${reset} %s\n" "$*" >&2; exit 1; }
+on_error() {
+  local code=$? line=${BASH_LINENO[0]:-desconhecida}
+  printf "\n${red}[Erro]${reset} Instalação interrompida na linha %s (código %s).\n" "$line" "$code" >&2
+  printf 'Corrija a mensagem acima e execute o instalador novamente; dados existentes serão preservados.\n' >&2
+  exit "$code"
+}
+trap on_error ERR
 
 [[ ${EUID} -eq 0 ]] || die "Execute como root: sudo bash install.sh"
 [[ -f "${SOURCE_DIR}/docker-compose.prod.yml" ]] || die "Execute este arquivo dentro da pasta do projeto."
-command -v openssl >/dev/null || die "Instale openssl antes de continuar."
 
-install_docker() {
-  if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
-    command -v jq >/dev/null || { apt-get update && apt-get install -y jq; }
-    return
-  fi
+install_dependencies() {
   [[ -f /etc/os-release ]] || die "Sistema não reconhecido. Use Ubuntu 22.04/24.04 ou Debian 12."
   . /etc/os-release
   case "${ID:-}" in ubuntu|debian) ;; *) die "Sistema suportado: Ubuntu ou Debian." ;; esac
-  info "Instalando Docker e dependências..."
+  info "Preparando dependências do sistema..."
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl docker.io jq openssl rsync
-  if ! apt-get install -y docker-compose-v2; then
-    apt-get install -y docker-compose-plugin || die "Não foi possível instalar Docker Compose v2."
+  DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl jq openssl rsync
+  if ! command -v docker >/dev/null; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-v2; then
+      DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin || die "Não foi possível instalar Docker Compose v2."
+    fi
   fi
   systemctl enable --now docker
+  docker info >/dev/null 2>&1 || die "O serviço Docker não iniciou corretamente."
 }
 
 configure_docker_dns() {
@@ -85,12 +93,21 @@ EOF
 }
 
 main() {
+  local requested_domain="${1:-}" domain existing_install=false
   clear || true
   printf '\n  BeakoHost Bots — Instalador do Painel\n  =====================================\n\n'
-  read -r -p "Domínio do painel [localhost]: " domain
-  domain="${domain:-localhost}"
-  [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+(:[0-9]+)?$ ]] || die "Domínio inválido. Informe somente host, sem http:// ou caminhos."
-  install_docker
+  if [[ -f "${ENV_FILE}" ]]; then
+    existing_install=true
+    domain="$(sed -n 's/^PUBLIC_URL=//p' "${ENV_FILE}" | head -n 1 | sed -E 's#^https?://##;s#/.*$##')"
+    domain="${domain:-localhost}"
+    info "Instalação existente detectada; configurações e dados serão preservados."
+  else
+    domain="$requested_domain"
+    if [[ -z "$domain" ]]; then read -r -p "Domínio do painel [localhost]: " domain; fi
+    domain="${domain:-localhost}"
+    [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+(:[0-9]+)?$ ]] || die "Domínio inválido. Informe somente host, sem http:// ou caminhos."
+  fi
+  install_dependencies
   check_network
   configure_docker_dns
   info "Copiando aplicação para ${INSTALL_DIR}..."
@@ -101,6 +118,7 @@ main() {
   [[ -f "${ENV_FILE}" ]] || write_env "$domain"
   bash "${INSTALL_DIR}/scripts/prepare-env-master-key.sh" "${ENV_FILE}"
   install -m 0755 "${INSTALL_DIR}/scripts/beakoctl" /usr/local/bin/beakoctl
+  docker compose --env-file "${ENV_FILE}" -f "${INSTALL_DIR}/docker-compose.prod.yml" config --quiet || die "Configuração do Docker Compose inválida."
   info "Construindo e iniciando os serviços..."
   cd "${INSTALL_DIR}"
   docker compose --env-file .env -f docker-compose.prod.yml up -d --build
@@ -121,7 +139,7 @@ main() {
   printf "\n${green}Instalação concluída.${reset}\n"
   printf 'Painel: %s\n' "$(grep '^PUBLIC_URL=' .env | cut -d= -f2-)"
   printf 'Gerenciamento: sudo beakoctl\n\n'
-  if [[ "$domain" != "localhost" ]]; then
+  if [[ "$existing_install" != "true" && "$domain" != "localhost" ]]; then
     warn "Aponte os registros DNS A/AAAA de ${domain} para esta VPS. O HTTPS será ativado automaticamente."
   fi
 }
