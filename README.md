@@ -36,16 +36,20 @@ Em Ubuntu 22.04/24.04 ou Debian 12:
 ```bash
 git clone https://github.com/Niltonjuniornzx/Beakohostbots.git
 cd Beakohostbots
-sudo bash install.sh
+sudo bash install.sh bots.seudominio.com
 ```
 
-O instalador pergunta o domínio, instala Docker, gera todos os segredos e inicia a stack. Depois use:
+O domínio também pode ser omitido para usar o modo interativo. O instalador valida o sistema, instala Docker e dependências, gera todos os segredos e inicia a stack. Ele pode ser executado novamente após uma falha ou atualização: o `.env`, a chave mestra, o banco e os volumes existentes são preservados. Depois use:
 
 ```bash
 sudo beakoctl
 ```
 
 O menu permite ver status/logs, reiniciar, atualizar e configurar domínio com HTTPS automático. Para repositório privado, clone usando uma chave SSH ou token de acesso do GitHub.
+
+## Instalação automática de Runner
+
+Em **Administração → Servidores**, clique em **Adicionar servidor**. O painel cria um token descartável e exibe um único comando para colar em uma VPS Ubuntu/Debian vazia. Esse comando baixa o projeto, instala Docker, prepara os runtimes Node.js/Python, registra o Runner e inicia o serviço automaticamente. Não é necessário clonar o repositório nem baixar o Runner manualmente.
 
 ## Variáveis de ambiente dos bots
 

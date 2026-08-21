@@ -44,7 +44,7 @@ export default function ServersAdmin() {
     void load();
   }
 
-  const command = `sudo bash scripts/install-runner.sh --panel ${origin} --token ${token}${origin.startsWith('http://') ? ' --allow-insecure' : ''}`;
+  const command = `sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/Niltonjuniornzx/Beakohostbots/main/scripts/bootstrap-runner.sh | sudo bash -s -- --panel ${origin} --token ${token}${origin.startsWith('http://') ? ' --allow-insecure' : ''}`;
 
   return <PageShell adminOnly>
     <header>
@@ -60,7 +60,7 @@ export default function ServersAdmin() {
       <b>Instale na VPS executora — token exibido uma única vez</b>
       <code>{command}</code>
       <button type="button" onClick={() => navigator.clipboard.writeText(command)}>Copiar comando</button>
-      <p>Execute na raiz do repositório. Expira em 15 minutos e só pode ser usado uma vez. Prefira domínio com HTTPS.</p>
+      <p>Cole em uma VPS Ubuntu/Debian vazia. O comando baixa, instala e conecta o Runner automaticamente. Expira em 15 minutos e só pode ser usado uma vez.</p>
     </div>}
     <div className="listPanel serverList">
       {nodes.length === 0 ? <div className="emptyState"><Server /><h3>Nenhum servidor cadastrado</h3><p>Adicione a primeira VPS executora.</p></div> : nodes.map(node =>

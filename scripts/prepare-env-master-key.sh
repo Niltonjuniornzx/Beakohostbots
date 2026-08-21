@@ -6,10 +6,14 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-secret_dir=/etc/beakohost/secrets
+secret_dir="${BEAKO_SECRET_DIR:-/etc/beakohost/secrets}"
 secret_file="$secret_dir/env-master-key"
 legacy_env_file="${1:-/opt/beakohost/.env}"
-install -d -m 0710 -o root -g 1001 "$secret_dir"
+# GNU install resolves -g as a group name on some distributions, so a
+# numeric container GID can fail on a brand-new host where that group is not
+# registered. Create first, then use chown, which accepts numeric IDs.
+install -d -m 0710 -o root "$secret_dir"
+chown 0:1001 "$secret_dir"
 
 if [ ! -s "$secret_file" ]; then
   umask 077
