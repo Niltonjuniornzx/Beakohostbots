@@ -36,10 +36,10 @@ Em Ubuntu 22.04/24.04 ou Debian 12:
 ```bash
 git clone https://github.com/Niltonjuniornzx/Beakohostbots.git
 cd Beakohostbots
-sudo bash install.sh
+sudo bash install.sh bots.seudominio.com
 ```
 
-O instalador pergunta o domínio, instala Docker, gera todos os segredos e inicia a stack. Depois use:
+O domínio também pode ser omitido para usar o modo interativo. O instalador valida o sistema, instala Docker e dependências, gera todos os segredos e inicia a stack. Ele pode ser executado novamente após uma falha ou atualização: o `.env`, a chave mestra, o banco e os volumes existentes são preservados. Depois use:
 
 ```bash
 sudo beakoctl
