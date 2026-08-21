@@ -19,11 +19,11 @@ export default function PageShell({ children, adminOnly = false }: { children: R
   return <main className="shell">
     <div className={`sidebarBackdrop ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(false)}/>
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-      <div className="brand"><div className="logo"><Bot size={23}/></div><div><b>BeakoHost</b><small>BOT CLOUD</small></div><button className="closeMenu" onClick={() => setMenuOpen(false)} aria-label="Fechar menu"><X/></button></div>
+      <div className="brand"><div className="logo"><img src="/branding/icon-square.webp" alt=""/></div><div><b>BeakoHost</b><small>BOT CLOUD</small></div><button className="closeMenu" onClick={() => setMenuOpen(false)} aria-label="Fechar menu"><X/></button></div>
       <nav><span className="navSection">PAINEL</span>{item('/', <Activity/>, 'Visão geral')}{item('/bots', <Bot/>, 'Meus bots')}{item('/security', <ShieldCheck/>, 'Segurança')}{role === 'ADMIN' && <><span className="navSection">ADMINISTRAÇÃO</span>{item('/admin', <Settings/>, 'Resumo')}{item('/admin/plans', <Gauge/>, 'Planos e limites')}{item('/admin/settings', <KeyRound/>, 'Configurações')}{item('/admin/users', <Users/>, 'Usuários')}{item('/admin/servers', <Server/>, 'Servidores')}{item('/admin/bots', <Bot/>, 'Distribuição')}</>}</nav>
       <div className="sidebarStatus"><span/><div><b>Plataforma operacional</b><small>Ambiente beta</small></div></div>
       <div className="account"><span>{name.slice(0, 2).toUpperCase()}</span><div><b>{name}</b><small>{role === 'ADMIN' ? 'Administrador' : 'Usuário'}</small></div><button className="logout" onClick={logout} title="Sair"><LogOut/></button></div>
     </aside>
-    <section className="workspace"><div className="mobileTopbar"><button onClick={() => setMenuOpen(true)} aria-label="Abrir menu"><Menu/></button><div className="mobileBrand"><span><Bot/></span><b>BeakoHost</b></div><div className="mobileAvatar">{name.slice(0, 2).toUpperCase()}</div></div><div className="content">{children}</div></section>
+    <section className="workspace"><div className="mobileTopbar"><button onClick={() => setMenuOpen(true)} aria-label="Abrir menu"><Menu/></button><div className="mobileBrand"><span><img src="/branding/icon-square.webp" alt=""/></span><b>BeakoHost</b></div><div className="mobileAvatar">{name.slice(0, 2).toUpperCase()}</div></div><div className="content">{children}</div></section>
   </main>;
 }
