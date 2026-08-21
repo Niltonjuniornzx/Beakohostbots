@@ -18,6 +18,14 @@
 .startupEdit>span b{color:#b9abff;font-family:ui-monospace,monospace}
 .startupEdit button{padding:8px 11px;font-size:9px;white-space:nowrap}
 .startupEdit .primary{background:#7657ff}
+.runtimePicker{display:flex!important;align-items:center;gap:9px!important;flex-wrap:wrap}
+.runtimePicker select{height:40px;min-width:235px;padding:0 38px 0 12px;border:1px solid #30384a;border-radius:9px;background:#090c12;color:#f4f5f8;outline:0}
+.runtimePicker select:focus{border-color:#7657ff;box-shadow:0 0 0 3px #7657ff18}
+.runtimePicker select:disabled{opacity:.55;cursor:not-allowed}
+.runtimePicker>span{padding:6px 9px;border-radius:7px;background:#171c27;color:#8f98aa!important;font-size:9px!important}
+.runtimePicker>span.runtimeMatch{background:#35cf7b12;color:#60dd98!important}
+.runtimePicker>span.runtimeMismatch{background:#eea83213;color:#f0b85b!important}
+.runtimePicker small{width:100%;color:#7d8699;font-size:9px}
 .startupEmpty{grid-column:1/-1;display:flex!important;align-items:center;gap:8px!important;min-height:40px;padding:8px 11px;border:1px dashed #3a4153;border-radius:9px;background:#11151e;color:#929bad}
 .startupEmpty svg{width:16px;color:#e9ad43}
 .startupEmpty span{font-size:10px!important}
