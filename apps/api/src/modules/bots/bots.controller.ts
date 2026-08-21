@@ -26,6 +26,7 @@ export class BotsController {
   @Post(':id/files/extract') extract(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: ExtractArchiveDto) { return this.bots.extractArchive(request.user.sub,id,input); }
   @Post(':id/actions') action(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: BotActionDto) { return this.bots.action(request.user.sub,id,input.action); }
   @Post(':id/deploy') deploy(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.autoDeploy(request.user.sub,id); }
+  @Get(':id/project-analysis') projectAnalysis(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.projectAnalysis(request.user.sub,id); }
   @Patch(':id/limits') limits(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateBotLimitsDto) { return this.bots.updateLimits(request.user.sub,id,input); }
   @Patch(':id/startup') startup(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateStartupDto) { return this.bots.updateStartup(request.user.sub,id,input); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
