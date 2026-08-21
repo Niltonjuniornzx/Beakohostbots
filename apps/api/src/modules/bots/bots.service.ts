@@ -35,6 +35,16 @@ export class BotsService {
     const existing=await this.prisma.resourceLimit.findFirst({where:{scope:'BOT',botId:id},select:{id:true}});if(existing)await this.prisma.resourceLimit.update({where:{id:existing.id},data});else await this.prisma.resourceLimit.create({data});
     return{success:true,effectiveLimits:input};
   }
+  async updateRuntime(userId:string,id:string,image:string){
+    const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},include:{node:{select:{status:true,runtimeImages:true}},files:{select:{path:true,content:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');
+    if(['RUNNING','STARTING','STOPPING'].includes(bot.status))throw new BadRequestException('Pare o bot antes de trocar o runtime');
+    if(!bot.node||bot.node.status!=='ONLINE'||!this.nodeImages(bot.node.runtimeImages).includes(image))throw new BadRequestException('O Runner deste bot não possui o runtime selecionado');
+    const [repository,tag]=image.split(':'),dash=tag.lastIndexOf('-');if(!repository||dash<1)throw new BadRequestException('Runtime inválido');const language: 'NODEJS'|'PYTHON'=repository==='node'?'NODEJS':'PYTHON',version=tag.slice(0,dash),variant=tag.slice(dash+1).toUpperCase() as 'ALPINE'|'SLIM';
+    const compatible=bot.files.map(file=>file.path).filter(path=>language==='PYTHON'?/\.py$/i.test(path):/\.(?:js|cjs|mjs|ts)$/i.test(path)&&!/\.d\.ts$/i.test(path)).sort((a,b)=>a.split('/').length-b.split('/').length||a.localeCompare(b));if(!compatible.length)throw new BadRequestException(`Nenhum arquivo ${language==='PYTHON'?'Python':'Node.js'} foi encontrado neste projeto`);
+    const analysis=analyzeProject(bot.files),entrypoint=compatible.includes(bot.entrypoint)?bot.entrypoint:analysis.detectedRuntime===language&&analysis.suggestedEntrypoint&&compatible.includes(analysis.suggestedEntrypoint)?analysis.suggestedEntrypoint:compatible[0];
+    const runtime=await this.prisma.runtime.upsert({where:{language_version_variant:{language,version,variant}},update:{},create:{language,version,variant,imageRepository:repository,imageTag:tag,imageDigest:'pending-verification',installCommand:language==='NODEJS'?['npm','ci']:['pip','install','-r','requirements.txt'],defaultStartCommand:language==='NODEJS'?['node']:['python']}});
+    const updated=await this.prisma.bot.update({where:{id},data:{runtimeId:runtime.id,entrypoint,startCommand:[language==='NODEJS'?'node':'python',entrypoint]},include:{runtime:true}});return{success:true,runtime:updated.runtime,entrypoint:updated.entrypoint,startCommand:updated.startCommand};
+  }
   async create(userId: string, input: CreateBotDto) {
     const [owner,currentBots]=await Promise.all([this.prisma.user.findUnique({where:{id:userId},include:{limits:{where:{scope:'USER'},take:1},plan:{include:{limits:{where:{scope:'PLAN'},take:1}}}}}),this.prisma.bot.count({where:{userId}})]);const limit=owner?.limits[0]||owner?.plan?.limits[0]||await this.prisma.resourceLimit.findFirst({where:{scope:'PLAN',plan:{isDefault:true,enabled:true}}});
     const maxBots=limit?.maxBots??5;

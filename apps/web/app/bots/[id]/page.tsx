@@ -4,13 +4,17 @@ import{useParams}from'next/navigation';
 import{Archive,ArrowLeft,Box,Check,ChevronRight,CircleGauge,Code2,Download,File as FileIcon,FilePlus,Folder,FolderInput,FolderPlus,HardDrive,KeyRound,Package,Pencil,Play,Plus,RotateCw,Save,Search,Settings,ShieldCheck,Square,Terminal,Trash2,TriangleAlert,Upload,X}from'lucide-react';
 import PageShell from'../../components/PageShell';
 type BotFile={id:string;path:string;byteSize:number;updatedAt:string;isDirectory:boolean};type Job={id:string;action:string;status:string;output?:string;error?:string;createdAt:string};type Dep={language?:string;detected:string[];declared:string[];missing:string[];hasPackageJson:boolean;catalog:string[]};type Limits={cpuMillicores:number;memoryMb:number;diskMb:number};type BotData={name:string;status:string;entrypoint:string;startCommand:string[];cpuUsagePercent:number;memoryUsageMb:number;diskUsageMb:number;lastMetricsAt:string|null;effectiveLimits:Limits;planLimits:Limits;runtime:{language:string;version:string;variant:string};node:null|{id:string;name:string;status:string;agentVersion:string|null}};type EnvItem={id:string;key:string;isSecret:boolean;configured:boolean;maskedValue:string;updatedAt:string};type DetectedEnv={key:string;configured:boolean};type View='console'|'files'|'dependencies'|'variables'|'startup'|'settings';
+type RuntimeOption={image:string;language:'NODEJS'|'PYTHON';label:string;version:string;variant:string;onlineNodes:number};type ProjectAnalysis={detectedRuntime:'NODEJS'|'PYTHON'|null;confidence:string;suggestedEntrypoint:string|null};
 const b64=(file:File)=>new Promise<string>((ok,fail)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>fail(r.error);r.readAsDataURL(file)});
 const bytes=(n:number)=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';const date=(v:string)=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(v));
 export default function BotDetail(){const{id}=useParams<{id:string}>();const[bot,setBot]=useState<BotData|null>(null),[files,setFiles]=useState<BotFile[]>([]),[jobs,setJobs]=useState<Job[]>([]),[logs,setLogs]=useState(''),[view,setView]=useState<View>('console'),[path,setPath]=useState(''),[search,setSearch]=useState(''),[depSearch,setDepSearch]=useState(''),[editor,setEditor]=useState<{path:string;content:string}|null>(null),[dep,setDep]=useState<Dep>({detected:[],declared:[],missing:[],hasPackageJson:false,catalog:[]}),[selected,setSelected]=useState<string[]>([]),[fileSelected,setFileSelected]=useState<string[]>([]),[moveOpen,setMoveOpen]=useState(false),[moveDestination,setMoveDestination]=useState(''),[uploading,setUploading]=useState(false),[message,setMessage]=useState('');const input=useRef<HTMLInputElement>(null),folderInput=useRef<HTMLInputElement>(null);
 const[adminNodes,setAdminNodes]=useState<any[]>([]),[busy,setBusy]=useState(''),[limits,setLimits]=useState<Limits>({cpuMillicores:250,memoryMb:256,diskMb:1024}),[startupEntry,setStartupEntry]=useState(''),[startupCommand,setStartupCommand]=useState('');
+const[manualDeps,setManualDeps]=useState<string[]>([]);
+const[runtimes,setRuntimes]=useState<RuntimeOption[]>([]),[projectAnalysis,setProjectAnalysis]=useState<ProjectAnalysis>({detectedRuntime:null,confidence:'LOW',suggestedEntrypoint:null});
 const[envItems,setEnvItems]=useState<EnvItem[]>([]),[detectedEnv,setDetectedEnv]=useState<DetectedEnv[]>([]),[legacyEnv,setLegacyEnv]=useState(false),[envForm,setEnvForm]=useState({id:'',key:'',value:'',isSecret:true}),[envBulk,setEnvBulk]=useState(''),[envRestart,setEnvRestart]=useState(false);
-const load=()=>Promise.all([fetch('/api/bots/'+id).then(r=>r.ok?r.json():null),fetch('/api/bots/'+id+'/files').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/jobs').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/dependencies').then(r=>r.ok?r.json():{detected:[],declared:[],missing:[],hasPackageJson:false,catalog:[]}),fetch('/api/bots/'+id+'/logs').then(r=>r.ok?r.json():{content:''})]).then(([b,f,j,d,l])=>{setBot(b);setFiles(f);setJobs(j);setDep({...d,catalog:d.catalog||d.detected||[]});setLogs(l.content||'');setSelected(s=>s.length?s:d.missing)});
+const load=()=>Promise.all([fetch('/api/bots/'+id).then(r=>r.ok?r.json():null),fetch('/api/bots/'+id+'/files').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/jobs').then(r=>r.ok?r.json():[]),fetch('/api/bots/'+id+'/dependencies').then(r=>r.ok?r.json():{detected:[],declared:[],missing:[],hasPackageJson:false,catalog:[]}),fetch('/api/bots/'+id+'/logs').then(r=>r.ok?r.json():{content:''}),fetch('/api/bots/'+id+'/project-analysis').then(r=>r.ok?r.json():{detectedRuntime:null,confidence:'LOW',suggestedEntrypoint:null})]).then(([b,f,j,d,l,a])=>{setBot(b);setFiles(f);setJobs(j);setDep({...d,catalog:d.catalog||d.detected||[]});setLogs(l.content||'');setProjectAnalysis(a);setSelected(s=>s.length?s:d.missing)});
 useEffect(()=>{void load();const timer=setInterval(()=>void load(),3000);return()=>clearInterval(timer)},[id]);
+useEffect(()=>{fetch('/api/bots/runtimes').then(r=>r.ok?r.json():[]).then(setRuntimes).catch(()=>setRuntimes([]))},[]);
 useEffect(()=>{fetch('/api/admin/nodes').then(r=>r.ok?r.json():[]).then(setAdminNodes).catch(()=>setAdminNodes([]))},[]);
 useEffect(()=>{if(bot?.effectiveLimits)setLimits(bot.effectiveLimits)},[bot?.effectiveLimits.cpuMillicores,bot?.effectiveLimits.memoryMb,bot?.effectiveLimits.diskMb]);
 useEffect(()=>{if(bot?.entrypoint)setStartupEntry(bot.entrypoint)},[bot?.entrypoint]);
@@ -23,6 +27,7 @@ async function run(action:string){setMessage('');setBusy(action);try{await api('
 async function deploy(){setBusy('DEPLOY');try{await api('/deploy',{method:'POST'});setMessage('Deploy automático: sincronizando, instalando dependências e iniciando o bot.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 async function saveLimits(){setBusy('LIMITS');try{const result=await api('/limits',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(limits)});setLimits(result.effectiveLimits);setMessage('Limites salvos. Reinicie o bot para aplicar CPU e memória ao container.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 async function saveStartup(command=startupCommand,entrypoint=startupEntry){setBusy('STARTUP');try{await api('/startup',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({entrypoint,command})});setMessage('Inicialização validada e salva. A nova configuração será usada no próximo deploy.')}catch(e){setMessage((e as Error).message)}finally{setBusy('')}await load()}
+async function changeRuntime(image:string){if(!image)return;setBusy('RUNTIME');try{const result=await api('/runtime',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({image})});setStartupEntry(result.entrypoint);setStartupCommand(result.startCommand.join(' '));setMessage('Runtime alterado e novo arquivo inicial selecionado automaticamente.');await load()}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 async function editStartupFile(file:string){setView('files');setPath(file.includes('/')?file.slice(0,file.lastIndexOf('/')):'');await open(file)}
 async function deleteBot(){if(!confirm('Excluir este bot, o container e todos os arquivos permanentemente?'))return;if(!confirm('Esta ação não pode ser desfeita. Deseja continuar?'))return;try{const result=await api('',{method:'DELETE'});if(result.queued){setMessage('Exclusão enviada ao Runner. O bot desaparecerá após a limpeza.');setTimeout(()=>window.location.href='/bots',1800)}else window.location.href='/bots'}catch(e){setMessage((e as Error).message)}}
 async function migrate(nodeId:string){if(!nodeId||nodeId===bot?.node?.id)return;if(bot?.status!=='STOPPED'){setMessage('Pare o bot antes de migrar para outro servidor.');return}const response=await fetch('/api/admin/bots/'+id+'/node',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({nodeId})});const body=await response.json().catch(()=>({}));if(!response.ok){setMessage(body.message||'Não foi possível migrar o bot');return}setMessage('Bot migrado. O próximo deploy será executado no novo Runner.');await load()}
@@ -35,7 +40,8 @@ async function deleteEnv(item:EnvItem){if(!confirm(`Excluir a variável ${item.k
 async function importEnv(){if(!envBulk.trim())return;setBusy('ENV_BULK');try{const result=await api('/env/bulk',json({content:envBulk,isSecret:true,restart:envRestart}));setEnvBulk('');setMessage(`${result.imported} variável(is) importada(s) com segurança.`);await loadEnv()}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 async function importLegacy(){if(!confirm('Importar o .env antigo para o cofre e apagar o arquivo original?'))return;setBusy('ENV_IMPORT');try{await api('/env/import',json({confirm:true,restart:envRestart}));setMessage('Arquivo .env importado e removido do gerenciador de arquivos.');await Promise.all([loadEnv(),load()])}catch(e){setMessage((e as Error).message)}finally{setBusy('')}}
 function toggleFile(file:string){setFileSelected(current=>current.includes(file)?current.filter(item=>item!==file):[...current,file])}
-const visible=useMemo(()=>{const prefix=path?path+'/':'',map=new Map<string,BotFile>();for(const f of files){if(!f.path.startsWith(prefix)||f.path===path)continue;const rel=f.path.slice(prefix.length),first=rel.split('/')[0],p=prefix+first;map.set(p,rel.includes('/')?{id:'dir-'+p,path:p,byteSize:0,updatedAt:f.updatedAt,isDirectory:true}:f)}return[...map.values()].filter(f=>f.path.split('/').pop()?.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(b.isDirectory)-Number(a.isDirectory)||a.path.localeCompare(b.path))},[files,path,search]);const directories=useMemo(()=>{const result=new Set<string>();for(const file of files){const parts=file.path.split('/');if(file.isDirectory)result.add(file.path);for(let i=1;i<parts.length;i++)result.add(parts.slice(0,i).join('/'))}return[...result].sort()},[files]);const dependencyChoices=[...new Set([...dep.detected,...dep.catalog])].filter(name=>name.toLowerCase().includes(depSearch.toLowerCase())).sort((a,b)=>Number(dep.detected.includes(b))-Number(dep.detected.includes(a))||a.localeCompare(b));if(!bot)return <PageShell>
+function chooseStartup(entrypoint:string){setStartupEntry(entrypoint);setStartupCommand(`${bot?.runtime.language==='NODEJS'?'node':'python'} ${entrypoint.includes(' ')?`"${entrypoint}"`:entrypoint}`)}
+const visible=useMemo(()=>{const prefix=path?path+'/':'',map=new Map<string,BotFile>();for(const f of files){if(!f.path.startsWith(prefix)||f.path===path)continue;const rel=f.path.slice(prefix.length),first=rel.split('/')[0],p=prefix+first;map.set(p,rel.includes('/')?{id:'dir-'+p,path:p,byteSize:0,updatedAt:f.updatedAt,isDirectory:true}:f)}return[...map.values()].filter(f=>f.path.split('/').pop()?.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(b.isDirectory)-Number(a.isDirectory)||a.path.localeCompare(b.path))},[files,path,search]);const directories=useMemo(()=>{const result=new Set<string>();for(const file of files){const parts=file.path.split('/');if(file.isDirectory)result.add(file.path);for(let i=1;i<parts.length;i++)result.add(parts.slice(0,i).join('/'))}return[...result].sort()},[files]);const startupFiles=useMemo(()=>files.filter(file=>!file.isDirectory&&(bot?.runtime.language==='PYTHON'?/\.py$/i.test(file.path):/\.(?:js|cjs|mjs|ts)$/i.test(file.path)&&!/\.d\.ts$/i.test(file.path))).map(file=>file.path).sort((a,b)=>Number(b===startupEntry)-Number(a===startupEntry)||a.split('/').length-b.split('/').length||a.localeCompare(b)),[files,bot?.runtime.language,startupEntry]);useEffect(()=>{if(startupFiles.length&&!startupFiles.includes(startupEntry))chooseStartup(startupFiles[0])},[startupFiles.join('|'),startupEntry]);const startupAutoCommand=startupEntry?`${bot?.runtime.language==='NODEJS'?'node':'python'} ${startupEntry.includes(' ')?`"${startupEntry}"`:startupEntry}`:'';const dependencyChoices=[...new Set([...dep.detected,...dep.declared,...manualDeps])].filter(name=>name.toLowerCase().includes(depSearch.toLowerCase())).sort((a,b)=>Number(dep.detected.includes(b))-Number(dep.detected.includes(a))||a.localeCompare(b));if(!bot)return <PageShell>
 <div className="loader"/>
 </PageShell>;const online=bot.node?.status==='ONLINE',crumbs=path.split('/').filter(Boolean),used=files.reduce((n,f)=>n+f.byteSize,0),runtime=bot.runtime.language==='NODEJS'?'Node.js':'Python',entrypointExists=files.some(file=>!file.isDirectory&&file.path===bot.entrypoint),latestFailure=jobs.find(job=>job.status==='FAILED');const nav:[View,string,React.ReactNode][]=[['console','Console',<Terminal key="c"/>],['files','Arquivos',<Folder key="f"/>],['dependencies','Dependências',<Package key="d"/>],['variables','Variáveis',<KeyRound key="v"/>],['startup','Inicialização',<Code2 key="s"/>],['settings','Configurações',<Settings key="x"/>]];
 return <PageShell>
@@ -202,9 +208,9 @@ return <PageShell>
 <div className="filePathBar">
 <div>
 {path&&<button className="backFolder" onClick={()=>setPath(path.includes('/')?path.slice(0,path.lastIndexOf('/')):'')}><ArrowLeft/>Voltar</button>}
-<button onClick={()=>setPath('')}>/home/container</button>{crumbs.map((c,i)=>
-<span key={i}>/<button onClick={()=>setPath(crumbs.slice(0,i+1).join('/'))}>{c}</button>
-</span>)}</div>
+<nav className="fileBreadcrumb" aria-label="Caminho atual"><button className="breadcrumbRoot" onClick={()=>setPath('')}><Folder/><span>/home/container</span></button>{crumbs.map((c,i)=>
+<span key={i}><ChevronRight/><button className={i===crumbs.length-1?'current':''} onClick={()=>setPath(crumbs.slice(0,i+1).join('/'))}>{c}</button>
+</span>)}</nav></div>
 <label>
 <Search/>
 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar nesta pasta"/>
@@ -246,19 +252,19 @@ return <PageShell>
 <header>
 <div>
 <h2>Dependências e módulos</h2>
-<p>Pesquise, selecione e instale os pacotes usados pelo seu bot.</p>
+<p>Somente pacotes detectados no código ou adicionados por você aparecem aqui.</p>
 </div>
 <button disabled={!online||!selected.length} onClick={install}>Instalar selecionadas</button>
-</header><div className="dependencySearch"><Search/><input value={depSearch} onChange={e=>setDepSearch(e.target.value)} placeholder={bot.runtime.language==='PYTHON'?'Pesquisar pacote Python...':'Pesquisar pacote Node.js...'}/>{depSearch&&/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i.test(depSearch)&&!dependencyChoices.some(name=>name.toLowerCase()===depSearch.toLowerCase())&&<button onClick={()=>{setDep(d=>({...d,catalog:[...d.catalog,depSearch]}));setSelected(s=>[...new Set([...s,depSearch])]);setDepSearch('')}}><Plus/>Adicionar</button>}</div>{!dependencyChoices.length?<div className="emptyFiles">
+</header><div className="dependencySearch"><Search/><input value={depSearch} onChange={e=>setDepSearch(e.target.value.trimStart())} placeholder={bot.runtime.language==='PYTHON'?'Buscar ou adicionar pacote Python...':'Buscar ou adicionar pacote Node.js...'}/>{depSearch&&/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i.test(depSearch)&&![...dep.detected,...dep.declared,...manualDeps].some(name=>name.toLowerCase()===depSearch.toLowerCase())&&<button onClick={()=>{const name=depSearch.trim();setManualDeps(items=>[...new Set([...items,name])]);setSelected(s=>[...new Set([...s,name])]);setDepSearch('')}}><Plus/>Adicionar pacote</button>}</div>{!dependencyChoices.length?<div className="emptyFiles">
 <Package/>
-<h3>Nenhum pacote encontrado</h3>
-<p>Digite o nome exato do pacote para adicioná-lo.</p>
+<h3>{depSearch?'Nenhum pacote encontrado':'Nenhuma dependência detectada'}</h3>
+<p>{depSearch?'Use “Adicionar pacote” para incluir esse nome.':'Quando o código importar um pacote, ele aparecerá aqui. Você também pode adicioná-lo pelo campo acima.'}</p>
 </div>:<div className="dependencyList">{dependencyChoices.map(name=>
 <label key={name}>
 <input type="checkbox" checked={selected.includes(name)} disabled={dep.declared.includes(name)} onChange={e=>setSelected(s=>e.target.checked?[...s,name]:s.filter(x=>x!==name))}/>
 <div>
 <b>{name}</b>
-<small>{dep.declared.includes(name)?`Declarado no ${bot.runtime.language==='PYTHON'?'requirements.txt':'package.json'}`:dep.detected.includes(name)?'Detectado automaticamente no código':'Disponível para instalação'}</small>
+<small>{dep.declared.includes(name)?`Declarado no ${bot.runtime.language==='PYTHON'?'requirements.txt':'package.json'}`:dep.detected.includes(name)?'Detectado automaticamente no código':'Adicionado manualmente'}</small>
 </div>
 <span className={dep.declared.includes(name)?'installed':'pending'}>{dep.declared.includes(name)?'INSTALADO':'PENDENTE'}</span>
 </label>)}</div>}<footer>
@@ -282,19 +288,19 @@ return <PageShell>
 </header>
 <article>
 <label>IMAGEM DO RUNTIME</label>
-<div>
-<b>{bot.runtime.language.toLowerCase()}:{bot.runtime.version}-{bot.runtime.variant.toLowerCase()}</b>
-<span>Gerenciada pelo administrador</span>
+<div className="runtimePicker">
+<select value={`${bot.runtime.language==='NODEJS'?'node':'python'}:${bot.runtime.version}-${bot.runtime.variant.toLowerCase()}`} disabled={busy==='RUNTIME'||['RUNNING','STARTING','STOPPING'].includes(bot.status)} onChange={e=>changeRuntime(e.target.value)}>{runtimes.map(runtime=><option value={runtime.image} key={runtime.image}>{runtime.label} {runtime.version} · {runtime.variant}</option>)}</select>
+<span className={projectAnalysis.detectedRuntime===bot.runtime.language?'runtimeMatch':projectAnalysis.detectedRuntime?'runtimeMismatch':''}>{projectAnalysis.detectedRuntime?`Projeto detectado: ${projectAnalysis.detectedRuntime==='NODEJS'?'Node.js':'Python'}`:'Runtime não identificado pelo código'}</span>
+{['RUNNING','STARTING','STOPPING'].includes(bot.status)&&<small>Pare o bot para trocar o runtime.</small>}
 </div>
 </article>
 <article>
 <label>ARQUIVO INICIAL</label>
 <div className="startupEdit">
-<input value={startupEntry} onChange={e=>setStartupEntry(e.target.value)} placeholder={bot.runtime.language==='NODEJS'?'index.js':'main.py'}/>
-<input value={startupCommand} onChange={e=>setStartupCommand(e.target.value)} placeholder={bot.runtime.language==='NODEJS'?'npm start ou node index.js':'python main.py'}/>
-<span>O comando é validado antes de salvar e novamente antes de cada deploy.</span>
+{startupFiles.length?<select value={startupFiles.includes(startupEntry)?startupEntry:''} onChange={e=>chooseStartup(e.target.value)}><option value="" disabled>Selecione o arquivo que inicia o bot</option>{startupFiles.map(file=><option value={file} key={file}>{file}</option>)}</select>:<div className="startupEmpty"><TriangleAlert/><span>Nenhum arquivo {bot.runtime.language==='NODEJS'?'JavaScript/TypeScript':'Python'} encontrado. Envie os arquivos do bot primeiro.</span></div>}
+<span>{startupEntry&&startupFiles.includes(startupEntry)?<>Comando automático: <b>{startupAutoCommand}</b></>:'O painel procura todos os arquivos compatíveis, independentemente do nome.'}</span>
 <button onClick={()=>editStartupFile(startupEntry)} disabled={!files.some(file=>!file.isDirectory&&file.path===startupEntry)}><Pencil/>Editar arquivo</button>
-<button className="primary" onClick={()=>saveStartup()} disabled={busy==='STARTUP'||(!startupCommand.trim())}>{busy==='STARTUP'?'Validando...':'Validar e salvar'}</button>
+<button className="primary" onClick={()=>saveStartup(startupAutoCommand,startupEntry)} disabled={busy==='STARTUP'||!startupFiles.includes(startupEntry)}>{busy==='STARTUP'?'Salvando...':'Usar este arquivo'}</button>
 </div>
 </article>
 <article>
