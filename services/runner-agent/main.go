@@ -543,7 +543,16 @@ func runInstall(appDir string, job runnerJob) (string, string, error) {
 	var command []string
 	if strings.HasPrefix(job.Bot.Image, "node:") {
 		if fileExists(filepath.Join(appDir, "package.json")) {
-			command = []string{"sh", "-lc", "umask 000 && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --prod --no-frozen-lockfile"}
+			switch {
+			case fileExists(filepath.Join(appDir, "pnpm-lock.yaml")):
+				command = []string{"sh", "-lc", "umask 000 && corepack enable && pnpm install --prod --frozen-lockfile"}
+			case fileExists(filepath.Join(appDir, "yarn.lock")):
+				command = []string{"sh", "-lc", "umask 000 && corepack enable && yarn install --production --immutable || yarn install --production --frozen-lockfile"}
+			case fileExists(filepath.Join(appDir, "package-lock.json")) || fileExists(filepath.Join(appDir, "npm-shrinkwrap.json")):
+				command = []string{"sh", "-lc", "umask 000 && npm ci --omit=dev"}
+			default:
+				command = []string{"sh", "-lc", "umask 000 && npm install --omit=dev"}
+			}
 		} else {
 			return "", "", errors.New("package.json não encontrado")
 		}
@@ -552,8 +561,10 @@ func runInstall(appDir string, job runnerJob) (string, string, error) {
 			command = []string{"sh", "-lc", "umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python -r requirements.txt"}
 		} else if fileExists(filepath.Join(appDir, "pyproject.toml")) {
 			command = []string{"sh", "-lc", "umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir --upgrade --target .beako-python ."}
+		} else if fileExists(filepath.Join(appDir, "Pipfile")) {
+			command = []string{"sh", "-lc", "umask 000 && rm -rf .venv && mkdir -p .beako-python && python -m pip install --no-cache-dir pipenv && pipenv requirements > /tmp/beako-requirements.txt && python -m pip install --no-cache-dir --upgrade --target .beako-python -r /tmp/beako-requirements.txt"}
 		} else {
-			return "", "", errors.New("requirements.txt ou pyproject.toml não encontrado")
+			return "", "", errors.New("nenhum manifesto Python suportado encontrado (requirements.txt, pyproject.toml ou Pipfile)")
 		}
 	}
 	args := []string{"run", "--rm", "--user", "0:0", "--network", "bridge", "--security-opt", "no-new-privileges", "--cap-drop", "ALL", "-v", appDir + ":/app", "-w", "/app", job.Bot.Image}

@@ -33,4 +33,4 @@ export class UpdateBotLimitsDto {
   @IsInt() @Min(64) @Max(10485760) diskMb!:number;
 }
 export class BotFilesBatchDto { @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BotFileDto) files!:BotFileDto[]; }
-export class UpdateStartupDto { @IsString() @MinLength(1) @MaxLength(120) @Matches(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_./@()+ -]+$/) entrypoint!:string; }
+export class UpdateStartupDto { @IsOptional() @IsString() @MinLength(1) @MaxLength(240) @Matches(/^[a-zA-Z0-9_./@()+ '"-]+$/) command?:string; @IsOptional() @IsString() @MaxLength(240) @Matches(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_./@()+ -]+$/) entrypoint?:string; }
