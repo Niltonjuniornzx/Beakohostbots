@@ -47,6 +47,10 @@ sudo beakoctl
 
 O menu permite ver status/logs, reiniciar, atualizar e configurar domínio com HTTPS automático. Para repositório privado, clone usando uma chave SSH ou token de acesso do GitHub.
 
+## Instalação automática de Runner
+
+Em **Administração → Servidores**, clique em **Adicionar servidor**. O painel cria um token descartável e exibe um único comando para colar em uma VPS Ubuntu/Debian vazia. Esse comando baixa o projeto, instala Docker, prepara os runtimes Node.js/Python, registra o Runner e inicia o serviço automaticamente. Não é necessário clonar o repositório nem baixar o Runner manualmente.
+
 ## Variáveis de ambiente dos bots
 
 Use a aba **Variáveis** dentro de cada bot. Os valores são criptografados com AES-256-GCM e nunca voltam em texto aberto pela API. No Runner, eles existem somente em um arquivo temporário com permissão `0600` durante a criação do container; o arquivo é removido imediatamente depois.
