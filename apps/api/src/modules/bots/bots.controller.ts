@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AuthGuard, SessionUser } from '../auth/auth.guard';
-import { BotActionDto, BotFileDto, BotFilePathDto, BotFilesBatchDto, CreateBotDto, CreateEntryDto, DeleteEntriesDto, ExtractArchiveDto, InstallDependenciesDto, MoveEntriesDto, RenameEntryDto, UpdateBotLimitsDto, UpdateStartupDto } from './bots.dto';
+import { BotActionDto, BotFileDto, BotFilePathDto, BotFilesBatchDto, CreateBotDto, CreateEntryDto, DeleteEntriesDto, ExtractArchiveDto, InstallDependenciesDto, MoveEntriesDto, RenameEntryDto, UpdateBotLimitsDto, UpdateRuntimeDto, UpdateStartupDto } from './bots.dto';
 import { BotsService } from './bots.service';
 
 @UseGuards(AuthGuard)
@@ -28,6 +28,7 @@ export class BotsController {
   @Post(':id/deploy') deploy(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.autoDeploy(request.user.sub,id); }
   @Get(':id/project-analysis') projectAnalysis(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.projectAnalysis(request.user.sub,id); }
   @Patch(':id/limits') limits(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateBotLimitsDto) { return this.bots.updateLimits(request.user.sub,id,input); }
+  @Patch(':id/runtime') runtime(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateRuntimeDto) { return this.bots.updateRuntime(request.user.sub,id,input.image); }
   @Patch(':id/startup') startup(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string, @Body() input: UpdateStartupDto) { return this.bots.updateStartup(request.user.sub,id,input); }
   @Get(':id/jobs') jobs(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.jobs(request.user.sub,id); }
   @Get(':id/dependencies') dependencies(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.dependencies(request.user.sub,id); }
