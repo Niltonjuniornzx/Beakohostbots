@@ -26,7 +26,7 @@ export default function Dashboard() {
   const onlineNodes = new Set(bots.filter(bot => bot.node?.status === 'ONLINE').map(bot => bot.node?.name)).size;
   const usage=limits?.usage||{};const meter=(label:string,used:number,total:number,unit='')=><div className="usageBar"><div><b>{label}</b><span>{Math.round(used)}{unit} / {Math.round(total)}{unit}</span></div><i><u style={{width:`${Math.min(100,total?used/total*100:0)}%`}}/></i></div>;
   return <PageShell>
-    <header className="dashboardHeader"><div><small>VISÃO GERAL</small><h1>Olá, {user.displayName.split(' ')[0]} <span>👋</span></h1><p>Acompanhe seus bots e recursos em tempo real.</p></div><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></header>
+    <header className="dashboardHeader brandHero"><div><small>VISÃO GERAL</small><h1>Olá, {user.displayName.split(' ')[0]} <span>👋</span></h1><p>Acompanhe seus bots e recursos em tempo real.</p></div><Link className="primaryButton" href="/bots/new"><Plus/>Novo bot</Link></header>
     {failing > 0 && <Link className="healthAlert" href="/bots"><CircleAlert/><div><b>{failing} bot{failing > 1 ? 's precisam' : ' precisa'} de atenção</b><span>Confira o diagnóstico e os últimos registros.</span></div><ArrowUpRight/></Link>}
     <div className="stats dashboardStats">
       <article><div className="icon purple"><Bot/></div><div><small>BOTS CADASTRADOS</small><strong>{bots.length}<em> / {limits?.maxBots ?? 5}</em></strong><span className="statHint">{running} em execução</span></div></article>

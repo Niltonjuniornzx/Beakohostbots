@@ -28,8 +28,8 @@ export default function LoginPage() {
     router.replace('/'); router.refresh();
   }
   return <main className="authPage">
-    <section className="authBrand"><div className="brandMark"><Bot/></div><h1>BeakoHost</h1><p>Hospede, monitore e controle seus bots em uma plataforma segura.</p><div className="authGlow"/></section>
-    <section className="authPanel"><div className="authBox"><div className="mobileBrand"><Bot/> BeakoHost</div>
+    <section className="authBrand"><div className="brandMark"><img src="/branding/icon-square.webp" alt=""/></div><h1>BeakoHost</h1><p>Hospede, monitore e controle seus bots em uma plataforma segura.</p><div className="authGlow"/></section>
+    <section className="authPanel"><div className="authBox"><div className="mobileBrand"><img src="/branding/icon-square.webp" alt=""/> BeakoHost</div>
       {loading ? <div className="authLoading"><div className="loader"/>Verificando instalação...</div> : <>
         <small>{needsAdmin ? 'CONFIGURAÇÃO INICIAL' : register ? 'CRIAR CONTA' : 'BEM-VINDO DE VOLTA'}</small>
         <h2>{needsAdmin ? 'Crie o administrador' : register ? 'Comece agora' : 'Entre no painel'}</h2>
