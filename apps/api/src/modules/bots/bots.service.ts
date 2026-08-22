@@ -17,6 +17,14 @@ export class BotsService {
     for(const node of nodes.filter(node=>node.lastHeartbeatAt&&Date.now()-node.lastHeartbeatAt.getTime()<90000))for(const image of this.nodeImages(node.runtimeImages))counts.set(image,(counts.get(image)||0)+1);
     return [...counts].map(([image,onlineNodes])=>{const [repository,tag]=image.split(':');const dash=tag.lastIndexOf('-');const version=dash<0?tag:tag.slice(0,dash);const variant=(dash<0?'ALPINE':tag.slice(dash+1).toUpperCase());return{image,language:repository==='node'?'NODEJS':'PYTHON',label:repository==='node'?'Node.js':'Python',version,variant,onlineNodes}}).sort((a,b)=>a.language.localeCompare(b.language)||b.version.localeCompare(a.version));
   }
+  async availableRuntimesForBot(userId:string,id:string){
+    const admin=await this.isAdmin(userId);
+    const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},select:{node:{select:{status:true,runtimeImages:true,lastHeartbeatAt:true}}}});
+    if(!bot)throw new NotFoundException('Bot não encontrado');
+    const node=bot.node;
+    if(!node||node.status!=='ONLINE'||!isFreshRunnerHeartbeat(node.lastHeartbeatAt))return[];
+    return runtimeOptions(this.nodeImages(node.runtimeImages),1);
+  }
   list(userId: string) {
     return this.prisma.bot.findMany({ where: { userId }, include: { runtime: true, node: { select: { id: true, name: true, status: true } } }, orderBy: { createdAt: 'desc' } });
   }
@@ -36,9 +44,9 @@ export class BotsService {
     return{success:true,effectiveLimits:input};
   }
   async updateRuntime(userId:string,id:string,image:string){
-    const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},include:{node:{select:{status:true,runtimeImages:true}},files:{select:{path:true,content:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');
+    const admin=await this.isAdmin(userId);const bot=await this.prisma.bot.findFirst({where:{id,...(admin?{}:{userId})},include:{node:{select:{status:true,runtimeImages:true,lastHeartbeatAt:true}},files:{select:{path:true,content:true}}}});if(!bot)throw new NotFoundException('Bot não encontrado');
     if(['RUNNING','STARTING','STOPPING'].includes(bot.status))throw new BadRequestException('Pare o bot antes de trocar o runtime');
-    if(!bot.node||bot.node.status!=='ONLINE'||!this.nodeImages(bot.node.runtimeImages).includes(image))throw new BadRequestException('O Runner deste bot não possui o runtime selecionado');
+    if(!bot.node||bot.node.status!=='ONLINE'||!isFreshRunnerHeartbeat(bot.node.lastHeartbeatAt)||!this.nodeImages(bot.node.runtimeImages).includes(image))throw new BadRequestException('O Runner deste bot não está online ou não possui o runtime selecionado');
     const [repository,tag]=image.split(':'),dash=tag.lastIndexOf('-');if(!repository||dash<1)throw new BadRequestException('Runtime inválido');const language: 'NODEJS'|'PYTHON'=repository==='node'?'NODEJS':'PYTHON',version=tag.slice(0,dash),variant=tag.slice(dash+1).toUpperCase() as 'ALPINE'|'SLIM';
     const compatible=bot.files.map(file=>file.path).filter(path=>language==='PYTHON'?/\.py$/i.test(path):/\.(?:js|cjs|mjs|ts)$/i.test(path)&&!/\.d\.ts$/i.test(path)).sort((a,b)=>a.split('/').length-b.split('/').length||a.localeCompare(b));if(!compatible.length)throw new BadRequestException(`Nenhum arquivo ${language==='PYTHON'?'Python':'Node.js'} foi encontrado neste projeto`);
     const analysis=analyzeProject(bot.files),entrypoint=compatible.includes(bot.entrypoint)?bot.entrypoint:analysis.detectedRuntime===language&&analysis.suggestedEntrypoint&&compatible.includes(analysis.suggestedEntrypoint)?analysis.suggestedEntrypoint:compatible[0];
@@ -209,3 +217,6 @@ export class BotsService {
 }
 
 function parseEnvForUpload(content:Buffer){const text=content.toString('utf8');parseEnv(text);return text}
+
+export function isFreshRunnerHeartbeat(value:Date|null|undefined,now=Date.now()){return Boolean(value&&now-value.getTime()<90000)}
+export function runtimeOptions(images:string[],onlineNodes=1){return [...new Set(images)].map(image=>{const [repository,tag]=image.split(':');const dash=tag.lastIndexOf('-');const version=dash<0?tag:tag.slice(0,dash);const variant=dash<0?'ALPINE':tag.slice(dash+1).toUpperCase();return{image,language:repository==='node'?'NODEJS':'PYTHON',label:repository==='node'?'Node.js':'Python',version,variant,onlineNodes}}).sort((a,b)=>a.language.localeCompare(b.language)||b.version.localeCompare(a.version))}
