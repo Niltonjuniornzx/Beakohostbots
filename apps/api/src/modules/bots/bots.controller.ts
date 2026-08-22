@@ -10,6 +10,7 @@ export class BotsController {
   constructor(private readonly bots: BotsService) {}
   @Get('runtimes') runtimes() { return this.bots.availableRuntimes(); }
   @Get() list(@Req() request: FastifyRequest & { user: SessionUser }) { return this.bots.list(request.user.sub); }
+  @Get(':id/runtimes') botRuntimes(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.availableRuntimesForBot(request.user.sub,id); }
   @Get(':id') get(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.get(request.user.sub, id); }
   @Post() create(@Req() request: FastifyRequest & { user: SessionUser }, @Body() input: CreateBotDto) { return this.bots.create(request.user.sub, input); }
   @Delete(':id') remove(@Req() request: FastifyRequest & { user: SessionUser }, @Param('id') id: string) { return this.bots.deleteBot(request.user.sub,id); }
